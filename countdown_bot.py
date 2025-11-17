@@ -1,4 +1,5 @@
- import logging
+cat <<EOF > countdown_bot.py
+import logging
 import threading
 import random
 import jdatetime
@@ -31,7 +32,7 @@ def keep_alive():
 # ==========================================
 # بخش ۲: تنظیمات
 # ==========================================
-BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGL"
+BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
 DATA_FILE = "events.json"
 
 logging.basicConfig(
@@ -199,12 +200,10 @@ def get_persian_view():
     return msg
 
 def get_main_menu_keyboard():
-    """ساخت کیبورد اصلی (دکمه‌های پایین)"""
     keyboard = [
         ["🇩🇪 Deutsch (آلمان)", "🇮🇷 فارسی (ایران)"],
         ["➕ افزودن رویداد", "🗑 حذف رویداد"]
     ]
-    # resize_keyboard=True باعث می‌شود دکمه‌ها بزرگ و زشت نباشند
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 # ==========================================
@@ -251,7 +250,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await update.message.reply_text(
             f"✅ رویداد **{title}** اضافه شد.", 
             parse_mode='Markdown',
-            reply_markup=get_main_menu_keyboard() # بازگشت منوی اصلی
+            reply_markup=get_main_menu_keyboard()
         )
         return ConversationHandler.END
     except ValueError:
@@ -267,13 +266,11 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ==========================================
 
 async def delete_menu_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """نمایش منوی حذف با دکمه‌های شیشه‌ای"""
     keyboard = []
     for key, item in current_targets.items():
         btn_text = f"🗑 {item['fa_label']} ({item['date']})"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"del_{key}")])
     
-    # دکمه بستن منوی حذف
     keyboard.append([InlineKeyboardButton("🔙 بستن منو", callback_data="close_delete")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -290,7 +287,6 @@ async def delete_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             save_data()
             await query.answer(f"حذف شد: {deleted_item['fa_label']}")
             
-            # رفرش کردن لیست حذف
             keyboard = []
             for key, item in current_targets.items():
                 btn_text = f"🗑 {item['fa_label']} ({item['date']})"
@@ -306,11 +302,10 @@ async def delete_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("✅ منوی حذف بسته شد.")
 
 # ==========================================
-# بخش ۷: هندلر اصلی (منو و استارت)
+# بخش ۷: هندلر اصلی
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # نمایش منوی اصلی دکمه‌ای
     await update.message.reply_text(
         "سلام! 👋\nبه ربات مدیریت زمان خوش آمدید.\nاز منوی پایین استفاده کنید:",
         reply_markup=get_main_menu_keyboard()
@@ -324,16 +319,11 @@ async def handle_main_menu_buttons(update: Update, context: ContextTypes.DEFAULT
         
     elif "فارسی" in text:
         await update.message.reply_text(get_persian_view(), parse_mode='Markdown')
-        
-    # این دو گزینه در هندلرهای دیگر مدیریت می‌شوند اما اگر اینجا آمدند نادیده می‌گیریم
-    # چون توسط MessageHandler های اختصاصی فیلتر می‌شوند.
 
 def main() -> None:
     keep_alive()
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # 1. تعریف Conversation برای دکمه افزودن
-    # این فیلتر دقیقا چک میکند که متن دکمه "➕ افزودن رویداد" باشد
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^➕ افزودن رویداد"), add_start)],
         states={
@@ -344,17 +334,9 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
-
-    # 2. هندلر دکمه حذف
     application.add_handler(MessageHandler(filters.Regex("^🗑 حذف رویداد"), delete_menu_trigger))
-
-    # 3. هندلر دکمه‌های زبان
     application.add_handler(MessageHandler(filters.Regex("^(🇩🇪|🇮🇷)"), handle_main_menu_buttons))
-
-    # 4. هندلر استارت
     application.add_handler(CommandHandler("start", start))
-
-    # 5. هندلر دکمه‌های شیشه‌ای (حذف)
     application.add_handler(CallbackQueryHandler(delete_callback_handler))
     
     print("Bot started with Buttons...")
@@ -362,3 +344,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+EOF
