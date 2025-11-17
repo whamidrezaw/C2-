@@ -1,4 +1,4 @@
-import logging
+ import logging
 import threading
 import random
 import jdatetime
@@ -8,17 +8,17 @@ import os
 from flask import Flask
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 # ==========================================
-# بخش ۱: سرور (Flask)
+# بخش ۱: سرور
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "Bot is alive with Buttons!"
 
 def run_web_server():
     app.run(host='0.0.0.0', port=10000)
@@ -29,7 +29,7 @@ def keep_alive():
     t.start()
 
 # ==========================================
-# بخش ۲: تنظیمات و داده‌ها
+# بخش ۲: تنظیمات
 # ==========================================
 BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGL"
 DATA_FILE = "events.json"
@@ -70,7 +70,7 @@ DEFAULT_TARGETS = {
 current_targets = {}
 
 # ==========================================
-# بخش ۳: مدیریت فایل
+# بخش ۳: مدیریت داده
 # ==========================================
 
 def load_data():
@@ -94,7 +94,7 @@ def save_data():
 load_data()
 
 # ==========================================
-# بخش ۴: توابع نمایش
+# بخش ۴: توابع نمایش و کیبورد اصلی
 # ==========================================
 
 def format_duration(delta, lang="de"):
@@ -198,128 +198,166 @@ def get_persian_view():
     msg += f"\u200f💡 *\"{quote}\"*"
     return msg
 
+def get_main_menu_keyboard():
+    """ساخت کیبورد اصلی (دکمه‌های پایین)"""
+    keyboard = [
+        ["🇩🇪 Deutsch (آلمان)", "🇮🇷 فارسی (ایران)"],
+        ["➕ افزودن رویداد", "🗑 حذف رویداد"]
+    ]
+    # resize_keyboard=True باعث می‌شود دکمه‌ها بزرگ و زشت نباشند
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
 # ==========================================
 # بخش ۵: افزودن رویداد
 # ==========================================
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("📝 **عنوان رویداد** را بنویسید:\n(لغو: /cancel)", parse_mode='Markdown')
+    await update.message.reply_text(
+        "📝 **عنوان رویداد** را بنویسید:\n\n(اگر منصرف شدید دکمه 'انصراف' یا دستور /cancel را بزنید)", 
+        parse_mode='Markdown',
+        reply_markup=ReplyKeyboardMarkup([["❌ انصراف"]], resize_keyboard=True)
+    )
     return GET_TITLE
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['new_event_title'] = update.message.text
-    await update.message.reply_text("📅 **تاریخ** را وارد کنید (`DD.MM.YYYY`):\nمثال: `10.12.2025`", parse_mode='Markdown')
+    text = update.message.text
+    if text == "❌ انصراف":
+        await update.message.reply_text("❌ لغو شد.", reply_markup=get_main_menu_keyboard())
+        return ConversationHandler.END
+        
+    context.user_data['new_event_title'] = text
+    await update.message.reply_text(
+        "📅 **تاریخ** را وارد کنید (`DD.MM.YYYY`):\nمثال: `10.12.2025`", 
+        parse_mode='Markdown'
+    )
     return GET_DATE
 
 async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    date_text = update.message.text
+    text = update.message.text
+    if text == "❌ انصراف":
+        await update.message.reply_text("❌ لغو شد.", reply_markup=get_main_menu_keyboard())
+        return ConversationHandler.END
+
     try:
-        datetime.strptime(date_text, "%d.%m.%Y")
+        datetime.strptime(text, "%d.%m.%Y")
         title = context.user_data['new_event_title']
-        new_id = f"custom_{int(datetime.now().timestamp())}" # ساخت آیدی یکتا با زمان
+        new_id = f"custom_{int(datetime.now().timestamp())}"
         
         current_targets[new_id] = {
-            "date": date_text, "de_label": title, "fa_label": title,
+            "date": text, "de_label": title, "fa_label": title,
             "icon": "📌", "type": "personal"
         }
         save_data()
-        await update.message.reply_text(f"✅ رویداد **{title}** اضافه شد.\n/start", parse_mode='Markdown')
+        await update.message.reply_text(
+            f"✅ رویداد **{title}** اضافه شد.", 
+            parse_mode='Markdown',
+            reply_markup=get_main_menu_keyboard() # بازگشت منوی اصلی
+        )
         return ConversationHandler.END
     except ValueError:
         await update.message.reply_text("❌ فرمت اشتباه. دوباره تلاش کنید:\n`10.12.2025`", parse_mode='Markdown')
         return GET_DATE
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ لغو شد.")
+    await update.message.reply_text("❌ عملیات لغو شد.", reply_markup=get_main_menu_keyboard())
     return ConversationHandler.END
 
-async def reset_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global current_targets
-    current_targets = DEFAULT_TARGETS.copy()
-    save_data()
-    await update.message.reply_text("🔄 همه چیز به حالت اولیه برگشت.\n/start")
-
 # ==========================================
-# بخش ۶: حذف رویداد (قابلیت جدید)
+# بخش ۶: حذف رویداد
 # ==========================================
 
-async def delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """نمایش منوی حذف"""
+async def delete_menu_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """نمایش منوی حذف با دکمه‌های شیشه‌ای"""
     keyboard = []
     for key, item in current_targets.items():
-        # ساخت دکمه برای هر رویداد
         btn_text = f"🗑 {item['fa_label']} ({item['date']})"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"del_{key}")])
     
-    keyboard.append([InlineKeyboardButton("🔙 انصراف", callback_data="cancel_delete")])
+    # دکمه بستن منوی حذف
+    keyboard.append([InlineKeyboardButton("🔙 بستن منو", callback_data="close_delete")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text("🗑 **کدام رویداد حذف شود؟**\nبا انتخاب هر گزینه، آن رویداد بلافاصله حذف می‌شود.", reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text("🗑 **کدام رویداد حذف شود؟**", reply_markup=reply_markup, parse_mode='Markdown')
 
-# ==========================================
-# بخش ۷: هندلر دکمه‌ها
-# ==========================================
-
-def get_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🇩🇪 Deutsch (آلمان)", callback_data="view_de"),
-         InlineKeyboardButton("🇮🇷 فارسی (ایران)", callback_data="view_fa")]
-    ])
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def delete_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     data = query.data
     
-    # --- بخش حذف ---
     if data.startswith("del_"):
         key_to_delete = data.replace("del_", "")
         if key_to_delete in current_targets:
-            deleted_item = current_targets.pop(key_to_delete) # حذف از دیکشنری
-            save_data() # ذخیره تغییرات
+            deleted_item = current_targets.pop(key_to_delete)
+            save_data()
             await query.answer(f"حذف شد: {deleted_item['fa_label']}")
             
-            # بروزرسانی لیست حذف (حذف دکمه از لیست)
-            await delete_menu(update, context) 
+            # رفرش کردن لیست حذف
+            keyboard = []
+            for key, item in current_targets.items():
+                btn_text = f"🗑 {item['fa_label']} ({item['date']})"
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"del_{key}")])
+            keyboard.append([InlineKeyboardButton("🔙 بستن منو", callback_data="close_delete")])
+            
+            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await query.answer("این آیتم قبلاً حذف شده است.")
-    
-    elif data == "cancel_delete":
-        await query.answer("لغو شد")
-        await query.edit_message_text("✅ عملیات حذف پایان یافت.\nبرای دیدن داشبورد /start را بزنید.")
-
-    # --- بخش نمایش زبان ---
-    elif data in ["view_de", "view_fa"]:
+            
+    elif data == "close_delete":
         await query.answer()
-        new_text = get_german_view() if data == "view_de" else get_persian_view()
-        try:
-            await query.edit_message_text(text=new_text, parse_mode='Markdown', reply_markup=get_keyboard())
-        except Exception:
-            pass
+        await query.edit_message_text("✅ منوی حذف بسته شد.")
+
+# ==========================================
+# بخش ۷: هندلر اصلی (منو و استارت)
+# ==========================================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # نمایش منوی اصلی دکمه‌ای
+    await update.message.reply_text(
+        "سلام! 👋\nبه ربات مدیریت زمان خوش آمدید.\nاز منوی پایین استفاده کنید:",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+async def handle_main_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = update.message.text
+    
+    if "Deutsch" in text:
+        await update.message.reply_text(get_german_view(), parse_mode='Markdown')
+        
+    elif "فارسی" in text:
+        await update.message.reply_text(get_persian_view(), parse_mode='Markdown')
+        
+    # این دو گزینه در هندلرهای دیگر مدیریت می‌شوند اما اگر اینجا آمدند نادیده می‌گیریم
+    # چون توسط MessageHandler های اختصاصی فیلتر می‌شوند.
 
 def main() -> None:
     keep_alive()
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # افزودن ConversationHandler برای Add
+    # 1. تعریف Conversation برای دکمه افزودن
+    # این فیلتر دقیقا چک میکند که متن دکمه "➕ افزودن رویداد" باشد
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("add", add_start)],
+        entry_points=[MessageHandler(filters.Regex("^➕ افزودن رویداد"), add_start)],
         states={
             GET_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_title)],
             GET_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_date)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(filters.Regex("^❌ انصراف$"), cancel)],
     )
 
     application.add_handler(conv_handler)
+
+    # 2. هندلر دکمه حذف
+    application.add_handler(MessageHandler(filters.Regex("^🗑 حذف رویداد"), delete_menu_trigger))
+
+    # 3. هندلر دکمه‌های زبان
+    application.add_handler(MessageHandler(filters.Regex("^(🇩🇪|🇮🇷)"), handle_main_menu_buttons))
+
+    # 4. هندلر استارت
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("reset", reset_data))
+
+    # 5. هندلر دکمه‌های شیشه‌ای (حذف)
+    application.add_handler(CallbackQueryHandler(delete_callback_handler))
     
-    # دستور جدید حذف
-    application.add_handler(CommandHandler("delete", delete_menu))
-    
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    print("Bot started...")
+    print("Bot started with Buttons...")
     application.run_polling()
 
 if __name__ == "__main__":
