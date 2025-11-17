@@ -1,4 +1,3 @@
-cat <<EOF > countdown_bot.py
 import logging
 import threading
 import random
@@ -344,4 +343,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-EOF
