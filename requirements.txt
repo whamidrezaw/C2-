@@ -3,3 +3,4 @@ python-dateutil
 flask
 jdatetime
 pytz
+deep-translator
