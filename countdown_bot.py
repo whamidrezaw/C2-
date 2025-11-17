@@ -2,6 +2,7 @@ import logging
 import threading
 import random
 import jdatetime
+import pytz  # کتابخانه مدیریت مناطق زمانی
 from flask import Flask
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -9,13 +10,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ==========================================
-# بخش ۱: تنظیمات سرور (ضد خواب)
+# بخش ۱: سرور زنده نگه دارنده
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is alive! Dashboard Updated."
+    return "Bot is alive and running with Timezones!"
 
 def run_web_server():
     app.run(host='0.0.0.0', port=10000)
@@ -26,7 +27,7 @@ def keep_alive():
     t.start()
 
 # ==========================================
-# بخش ۲: تنظیمات ربات و داده‌ها
+# بخش ۲: تنظیمات
 # ==========================================
 BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
 
@@ -35,10 +36,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# تنظیم زبان تاریخ شمسی
-jdatetime.set_locale('fa_IR')
+# تنظیم مناطق زمانی دقیق
+TZ_GERMANY = pytz.timezone('Europe/Berlin')
+TZ_IRAN = pytz.timezone('Asia/Tehran')
 
-# جملات انگیزشی (آلمانی و فارسی)
+# جملات انگیزشی
 QUOTES = [
     ("Zeit ist das wertvollste Gut, das wir besitzen.", "زمان باارزش‌ترین دارایی است که ما داریم."),
     ("Der beste Weg, die Zukunft vorherzusagen, ist, sie zu gestalten.", "بهترین راه پیش‌بینی آینده، ساختن آن است."),
@@ -52,13 +54,9 @@ QUOTES = [
     ("Fokussiere dich auf die Zukunft, denn dort wirst du den Rest deines Lebens verbringen.", "روی آینده تمرکز کن، چون بقیه عمرت را آنجا سپری خواهی کرد.")
 ]
 
-# نام ماه‌های آلمانی
-DE_MONTHS = {
-    1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni",
-    7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"
-}
+DE_MONTHS = {1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai", 6: "Juni", 7: "Juli", 8: "August", 9: "September", 10: "Oktober", 11: "November", 12: "Dezember"}
 
-# تاریخ‌های هدف
+# داده‌های هدف
 TARGETS = {
     "residence": {"date": "22.09.2026", "de_label": "Ablauf Aufenthaltstitel", "fa_label": "پایان کارت اقامت", "icon": "🔴"},
     "iran_entry": {"date": "18.12.2026", "de_label": "Geplante Einreise (Iran)", "fa_label": "ورود احتمالی به ایران", "icon": "🟡"},
@@ -68,140 +66,145 @@ TARGETS = {
 }
 
 # ==========================================
-# بخش ۳: توابع محاسباتی و گرافیکی
+# بخش ۳: توابع تولید پیام
 # ==========================================
 
 def format_duration(delta, lang="de"):
-    """تبدیل فاصله زمانی به متن کامل و دقیق"""
     parts = []
-    
     if lang == "de":
         if delta.years > 0: parts.append(f"{delta.years} Jahr{'e' if delta.years > 1 else ''}")
         if delta.months > 0: parts.append(f"{delta.months} Monat{'e' if delta.months > 1 else ''}")
         if delta.days > 0: parts.append(f"{delta.days} Tag{'e' if delta.days > 1 else ''}")
-        # اگر بخواهید ساعت دقیق هم باشد:
-        # if delta.hours > 0: parts.append(f"{delta.hours} Std.")
         return ", ".join(parts) if parts else "Heute!"
-    else: # fa
+    else:
         if delta.years > 0: parts.append(f"{delta.years} سال")
         if delta.months > 0: parts.append(f"{delta.months} ماه")
         if delta.days > 0: parts.append(f"{delta.days} روز")
         return " و ".join(parts) if parts else "همین امروز!"
 
-def generate_dashboard():
-    now = datetime.now()
-    j_now = jdatetime.datetime.now()
+def get_german_view():
+    """تولید پیام آلمانی با ساعت آلمان"""
+    # ساعت دقیق برلین
+    now = datetime.now(TZ_GERMANY)
+    date_str = f"{now.day}. {DE_MONTHS[now.month]} {now.year}"
+    time_str = now.strftime("%H:%M")
     
-    # انتخاب یک جمله تصادفی
-    quote_de, quote_fa = random.choice(QUOTES)
+    quote = random.choice(QUOTES)[0] # جمله آلمانی
 
-    # --- ساخت بخش آلمانی ---
-    de_date_str = f"{now.day}. {DE_MONTHS[now.month]} {now.year}"
-    de_time_str = now.strftime("%H:%M")
-    
-    msg = f"📅 **Aktueller Status | {de_date_str}**\n"
-    msg += f"⌚️ Uhrzeit: {de_time_str}\n\n"
+    msg = f"📅 **Aktueller Status | {date_str}**\n"
+    msg += f"⌚️ Uhrzeit: {time_str} (Deutschland)\n\n"
     
     msg += "╭ 🚧 **Behörden & Aufenthalt**\n│\n"
-    
-    # آیتم‌های اداری (آلمانی)
     for key in ["residence", "iran_entry", "passport"]:
         item = TARGETS[key]
-        t_date = datetime.strptime(item["date"], "%d.%m.%Y")
-        delta = relativedelta(t_date, now)
-        duration = format_duration(delta, "de")
-        
-        msg += f"│ {item['icon']} **{item['de_label']}**\n"
-        msg += f"│ └ 📅 Frist: {item['date']}\n"
-        msg += f"│ └ ⏳ Restzeit: {duration}\n│\n"
-    
-    msg += "╰\n\n╭ 🎉 **Kommende Ereignisse**\n│\n"
-    
-    # آیتم‌های مناسبتی (آلمانی)
+        t_date = datetime.strptime(item["date"], "%d.%m.%Y").replace(tzinfo=None) # حذف تایم‌زون برای محاسبه ساده
+        now_naive = now.replace(tzinfo=None)
+        delta = relativedelta(t_date, now_naive)
+        msg += f"│ {item['icon']} **{item['de_label']}**\n│ └ 📅 Frist: {item['date']}\n│ └ ⏳ Restzeit: {format_duration(delta, 'de')}\n│\n"
+    msg += "╰\n\n"
+
+    msg += "╭ 🎉 **Kommende Ereignisse**\n│\n"
     for key in ["nowruz_05", "nowruz_06"]:
         item = TARGETS[key]
-        t_date = datetime.strptime(item["date"], "%d.%m.%Y")
-        delta = relativedelta(t_date, now)
-        duration = format_duration(delta, "de")
-        
-        msg += f"│ {item['icon']} **{item['de_label']}**\n"
-        msg += f"│ └ 📅 Datum: {item['date']}\n"
-        msg += f"│ └ ⏳ Restzeit: {duration}\n│\n"
-        
+        t_date = datetime.strptime(item["date"], "%d.%m.%Y").replace(tzinfo=None)
+        now_naive = now.replace(tzinfo=None)
+        delta = relativedelta(t_date, now_naive)
+        msg += f"│ {item['icon']} **{item['de_label']}**\n│ └ 📅 Datum: {item['date']}\n│ └ ⏳ Restzeit: {format_duration(delta, 'de')}\n│\n"
     msg += "╰\n\n"
-    msg += f"💡 *\"{quote_de}\"*\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-    # --- ساخت بخش فارسی ---
-    fa_date_str = j_now.strftime("%d %B %Y")
     
-    msg += f"📅 **وضعیت زمانی شما | {fa_date_str}**\n"
-    msg += f"⌚️ ساعت: {de_time_str}\n\n"
+    msg += f"💡 *\"{quote}\"*"
+    return msg
+
+def get_persian_view():
+    """تولید پیام فارسی با ساعت ایران"""
+    # ساعت دقیق تهران
+    now_iran = datetime.now(TZ_IRAN)
+    
+    # تبدیل به شمسی
+    j_date = jdatetime.datetime.fromgregorian(datetime=now_iran)
+    jdatetime.set_locale('fa_IR')
+    date_str = j_date.strftime("%d %B %Y")
+    time_str = now_iran.strftime("%H:%M")
+    
+    quote = random.choice(QUOTES)[1] # جمله فارسی
+
+    # در چیدمان فارسی، برای جلوگیری از بهم ریختگی، ساختار را ساده‌تر و راست‌چین می‌کنیم
+    msg = f"📅 **وضعیت زمانی شما | {date_str}**\n"
+    msg += f"⌚️ ساعت: {time_str} (ایران)\n\n"
     
     msg += "╭ 🚧 **پرونده‌های اداری و مهاجرتی**\n│\n"
-    
-    # آیتم‌های اداری (فارسی)
     for key in ["residence", "iran_entry", "passport"]:
         item = TARGETS[key]
         t_date = datetime.strptime(item["date"], "%d.%m.%Y")
-        delta = relativedelta(t_date, now)
-        duration = format_duration(delta, "fa")
+        # محاسبه اختلاف زمان (از نظر ریاضی فرقی نمی‌کند مبدا کجا باشد، فاصله تا تاریخ ثابت است)
+        delta = relativedelta(t_date, datetime.now())
         
         msg += f"│ {item['icon']} **{item['fa_label']}**\n"
-        msg += f"│ └ 📅 تاریخ: {item['date']}\n"
-        msg += f"│ └ ⏳ باقیمانده: {duration}\n│\n"
+        msg += f"│ 📅 تاریخ: {item['date']}\n"
+        msg += f"│ ⏳ مانده: {format_duration(delta, 'fa')}\n│\n"
+    msg += "╰\n\n"
 
-    msg += "╰\n\n╭ 🎉 **مناسبت‌های پیش‌رو**\n│\n"
-
-    # آیتم‌های مناسبتی (فارسی)
+    msg += "╭ 🎉 **مناسبت‌های پیش‌رو**\n│\n"
     for key in ["nowruz_05", "nowruz_06"]:
         item = TARGETS[key]
         t_date = datetime.strptime(item["date"], "%d.%m.%Y")
-        delta = relativedelta(t_date, now)
-        duration = format_duration(delta, "fa")
+        delta = relativedelta(t_date, datetime.now())
         
         msg += f"│ {item['icon']} **{item['fa_label']}**\n"
-        msg += f"│ └ 📅 تاریخ: {item['date']}\n"
-        msg += f"│ └ ⏳ باقیمانده: {duration}\n│\n"
-
+        msg += f"│ 📅 تاریخ: {item['date']}\n"
+        msg += f"│ ⏳ مانده: {format_duration(delta, 'fa')}\n│\n"
     msg += "╰\n\n"
-    msg += f"💡 *\"{quote_fa}\"*"
     
+    msg += f"💡 *\"{quote}\"*"
     return msg
 
 # ==========================================
-# بخش ۴: هندلرها
+# بخش ۴: کنترل و دکمه‌ها
 # ==========================================
 
+def get_keyboard():
+    """دکمه‌های تغییر زبان"""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🇩🇪 Deutsch (آلمان)", callback_data="view_de"),
+            InlineKeyboardButton("🇮🇷 فارسی (ایران)", callback_data="view_fa")
+        ]
+    ])
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """نمایش داشبورد اصلی"""
-    dashboard_text = generate_dashboard()
-    
-    # دکمه رفرش برای به‌روزرسانی زمان
-    keyboard = [[InlineKeyboardButton("🔄 بروزرسانی وضعیت | Aktualisieren", callback_data="refresh")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(dashboard_text, parse_mode='Markdown', reply_markup=reply_markup)
+    # پیش‌فرض نسخه آلمانی را نشان می‌دهد
+    await update.message.reply_text(
+        get_german_view(), 
+        parse_mode='Markdown', 
+        reply_markup=get_keyboard()
+    )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer("Updating... | در حال بروزرسانی")
+    await query.answer() # حذف حالت لودینگ دکمه
     
-    if query.data == "refresh":
-        new_text = generate_dashboard()
-        try:
-            await query.edit_message_text(text=new_text, parse_mode='Markdown', reply_markup=query.message.reply_markup)
-        except Exception:
-            pass # اگر متن تغییر نکرده باشد ارور نمیدهد
+    new_text = ""
+    if query.data == "view_de":
+        new_text = get_german_view()
+    elif query.data == "view_fa":
+        new_text = get_persian_view()
+    
+    # فقط اگر متن تغییر کرده باشد پیام را ویرایش می‌کند
+    try:
+        await query.edit_message_text(
+            text=new_text, 
+            parse_mode='Markdown', 
+            reply_markup=get_keyboard()
+        )
+    except Exception:
+        pass 
 
 def main() -> None:
     keep_alive()
     application = Application.builder().token(BOT_TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    
-    print("Bot is running with Dashboard...")
+    print("Bot started with Dual Timezone support...")
     application.run_polling()
 
 if __name__ == "__main__":
