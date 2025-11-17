@@ -2,7 +2,7 @@ import logging
 import threading
 import random
 import jdatetime
-import pytz  # کتابخانه مدیریت مناطق زمانی
+import pytz
 from flask import Flask
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -16,7 +16,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is alive and running with Timezones!"
+    return "Bot is alive and running with Timezones and RTL fix!"
 
 def run_web_server():
     app.run(host='0.0.0.0', port=10000)
@@ -76,7 +76,7 @@ def format_duration(delta, lang="de"):
         if delta.months > 0: parts.append(f"{delta.months} Monat{'e' if delta.months > 1 else ''}")
         if delta.days > 0: parts.append(f"{delta.days} Tag{'e' if delta.days > 1 else ''}")
         return ", ".join(parts) if parts else "Heute!"
-    else:
+    else: # fa
         if delta.years > 0: parts.append(f"{delta.years} سال")
         if delta.months > 0: parts.append(f"{delta.months} ماه")
         if delta.days > 0: parts.append(f"{delta.days} روز")
@@ -84,12 +84,11 @@ def format_duration(delta, lang="de"):
 
 def get_german_view():
     """تولید پیام آلمانی با ساعت آلمان"""
-    # ساعت دقیق برلین
     now = datetime.now(TZ_GERMANY)
     date_str = f"{now.day}. {DE_MONTHS[now.month]} {now.year}"
     time_str = now.strftime("%H:%M")
     
-    quote = random.choice(QUOTES)[0] # جمله آلمانی
+    quote = random.choice(QUOTES)[0]
 
     msg = f"📅 **Aktueller Status | {date_str}**\n"
     msg += f"⌚️ Uhrzeit: {time_str} (Deutschland)\n\n"
@@ -97,7 +96,7 @@ def get_german_view():
     msg += "╭ 🚧 **Behörden & Aufenthalt**\n│\n"
     for key in ["residence", "iran_entry", "passport"]:
         item = TARGETS[key]
-        t_date = datetime.strptime(item["date"], "%d.%m.%Y").replace(tzinfo=None) # حذف تایم‌زون برای محاسبه ساده
+        t_date = datetime.strptime(item["date"], "%d.%m.%Y").replace(tzinfo=None)
         now_naive = now.replace(tzinfo=None)
         delta = relativedelta(t_date, now_naive)
         msg += f"│ {item['icon']} **{item['de_label']}**\n│ └ 📅 Frist: {item['date']}\n│ └ ⏳ Restzeit: {format_duration(delta, 'de')}\n│\n"
@@ -117,45 +116,41 @@ def get_german_view():
 
 def get_persian_view():
     """تولید پیام فارسی با ساعت ایران"""
-    # ساعت دقیق تهران
     now_iran = datetime.now(TZ_IRAN)
     
-    # تبدیل به شمسی
     j_date = jdatetime.datetime.fromgregorian(datetime=now_iran)
     jdatetime.set_locale('fa_IR')
     date_str = j_date.strftime("%d %B %Y")
     time_str = now_iran.strftime("%H:%M")
     
-    quote = random.choice(QUOTES)[1] # جمله فارسی
+    quote = random.choice(QUOTES)[1]
 
-    # در چیدمان فارسی، برای جلوگیری از بهم ریختگی، ساختار را ساده‌تر و راست‌چین می‌کنیم
-    msg = f"📅 **وضعیت زمانی شما | {date_str}**\n"
-    msg += f"⌚️ ساعت: {time_str} (ایران)\n\n"
+    # استفاده از کاراکتر نامرئی (Zero Width Non-Joiner) برای اجبار به راست‌چین در تلگرام
+    # حذف کاراکترهای گرافیکی برای جلوگیری از بهم ریختگی
+    msg = f"\u200f📅 **وضعیت زمانی شما | {date_str}**\n"
+    msg += f"\u200f⌚️ ساعت: {time_str} (ایران)\n\n"
     
-    msg += "╭ 🚧 **پرونده‌های اداری و مهاجرتی**\n│\n"
+    msg += "\u200f**🚧 پرونده‌های اداری و مهاجرتی**\n"
     for key in ["residence", "iran_entry", "passport"]:
         item = TARGETS[key]
         t_date = datetime.strptime(item["date"], "%d.%m.%Y")
-        # محاسبه اختلاف زمان (از نظر ریاضی فرقی نمی‌کند مبدا کجا باشد، فاصله تا تاریخ ثابت است)
-        delta = relativedelta(t_date, datetime.now())
+        delta = relativedelta(t_date, datetime.now()) # محاسبه اختلاف زمان با زمان جهانی
         
-        msg += f"│ {item['icon']} **{item['fa_label']}**\n"
-        msg += f"│ 📅 تاریخ: {item['date']}\n"
-        msg += f"│ ⏳ مانده: {format_duration(delta, 'fa')}\n│\n"
-    msg += "╰\n\n"
-
-    msg += "╭ 🎉 **مناسبت‌های پیش‌رو**\n│\n"
+        msg += f"\u200f{item['icon']} **{item['fa_label']}**\n"
+        msg += f"\u200f  🗓 تاریخ: {item['date']}\n"
+        msg += f"\u200f  ⏳ باقیمانده: {format_duration(delta, 'fa')}\n\n" # یک خط خالی برای جداسازی بهتر
+    
+    msg += "\u200f**🎉 مناسبت‌های پیش‌رو**\n"
     for key in ["nowruz_05", "nowruz_06"]:
         item = TARGETS[key]
         t_date = datetime.strptime(item["date"], "%d.%m.%Y")
         delta = relativedelta(t_date, datetime.now())
         
-        msg += f"│ {item['icon']} **{item['fa_label']}**\n"
-        msg += f"│ 📅 تاریخ: {item['date']}\n"
-        msg += f"│ ⏳ مانده: {format_duration(delta, 'fa')}\n│\n"
-    msg += "╰\n\n"
+        msg += f"\u200f{item['icon']} **{item['fa_label']}**\n"
+        msg += f"\u200f  🗓 تاریخ: {item['date']}\n"
+        msg += f"\u200f  ⏳ باقیمانده: {format_duration(delta, 'fa')}\n\n"
     
-    msg += f"💡 *\"{quote}\"*"
+    msg += f"\u200f💡 *\"{quote}\"*"
     return msg
 
 # ==========================================
@@ -163,7 +158,6 @@ def get_persian_view():
 # ==========================================
 
 def get_keyboard():
-    """دکمه‌های تغییر زبان"""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🇩🇪 Deutsch (آلمان)", callback_data="view_de"),
@@ -172,7 +166,6 @@ def get_keyboard():
     ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # پیش‌فرض نسخه آلمانی را نشان می‌دهد
     await update.message.reply_text(
         get_german_view(), 
         parse_mode='Markdown', 
@@ -181,7 +174,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer() # حذف حالت لودینگ دکمه
+    await query.answer()
     
     new_text = ""
     if query.data == "view_de":
@@ -189,7 +182,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif query.data == "view_fa":
         new_text = get_persian_view()
     
-    # فقط اگر متن تغییر کرده باشد پیام را ویرایش می‌کند
     try:
         await query.edit_message_text(
             text=new_text, 
@@ -204,7 +196,7 @@ def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    print("Bot started with Dual Timezone support...")
+    print("Bot started with Dual Timezone and RTL fix...")
     application.run_polling()
 
 if __name__ == "__main__":
