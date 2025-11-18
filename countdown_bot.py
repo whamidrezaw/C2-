@@ -11,17 +11,16 @@ import certifi
 import jdatetime
 import google.generativeai as genai
 import ssl
+import config  # Importing configuration from config.py
 
 app = Flask(__name__, template_folder='templates')
 
-# --- CONFIGURATION ---
-BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
-GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM" 
-
-# لینک دیتابیس شما
-MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
-
-WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
+# --- CONFIGURATION IMPORT ---
+# We read variables from config.py now
+BOT_TOKEN = config.BOT_TOKEN
+GEMINI_API_KEY = config.GEMINI_API_KEY
+MONGO_URI = config.MONGO_URI
+WEBAPP_URL_BASE = config.WEBAPP_URL_BASE
 
 # Setup AI
 try:
@@ -33,20 +32,16 @@ except: pass
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- DATABASE CONNECTION (SSL FIX v3) ---
-# این بخش تغییر کرده تا مشکل اتصال حل شود
+# --- DATABASE CONNECTION (SSL ULTRA FIX) ---
 try:
-    # ایجاد کانتکست امنیتی دستی
     ca = certifi.where()
-    
     client = MongoClient(
         MONGO_URI,
         tls=True,
         tlsCAFile=ca,
-        serverSelectionTimeoutMS=5000  # اگر تا 5 ثانیه وصل نشد ارور بدهد
+        serverSelectionTimeoutMS=5000
     )
-    
-    # تست اتصال (یک دستور ساده می‌فرستیم)
+    # Test Connection
     client.admin.command('ping')
     
     db = client['time_manager_db']
@@ -54,19 +49,18 @@ try:
     logger.info("✅✅✅ MONGODB CONNECTED SUCCESSFULLY! ✅✅✅")
     
 except Exception as e:
-    logger.error(f"❌❌❌ DATABASE CONNECTION FAILED: {e}")
-    users_collection = None
+    logger.error(f"❌ CONNECTION FAILED: {e}")
+    users_collection = None 
 
 # --- FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is running (Database Fixed)"
+def home(): return "Bot is running (Config Separated)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     data = get_user_data(user_id)
     targets = data.get('targets', {})
     
-    # تاریخ شمسی برای نمایش
     for key, item in targets.items():
         try:
             g_date = datetime.strptime(item['date'], "%d.%m.%Y")
@@ -82,10 +76,7 @@ def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
 
 # --- DATA HELPERS ---
 def get_user_data(user_id):
-    # اگر دیتابیس وصل نبود، موقتاً یک دیکشنری خالی بده تا ربات کرش نکند
-    if users_collection is None: 
-        logger.warning("⚠️ Database offline, returning empty data.")
-        return {"_id": str(user_id), "targets": {}}
+    if users_collection is None: return {"_id": str(user_id), "targets": {}}
     
     uid = str(user_id)
     try:
@@ -95,25 +86,16 @@ def get_user_data(user_id):
             users_collection.insert_one(new_data)
             return new_data
         return data
-    except Exception as e:
-        logger.error(f"Read Error: {e}")
-        return {"_id": uid, "targets": {}}
+    except: return {"_id": uid, "targets": {}}
 
 def update_user_data(user_id, data):
-    if users_collection is None: 
-        logger.error("⚠️ Cannot save data: Database offline.")
-        return
-        
-    try:
-        users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
-        logger.info(f"✅ Data saved for user {user_id}")
-    except Exception as e:
-        logger.error(f"❌ Write Error: {e}")
+    if users_collection is None: return
+    try: users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
+    except: pass
 
 # --- SMART DATE PARSER ---
 def parse_smart_date(date_str):
     date_str = date_str.replace('/', '.').replace('-', '.')
-    # Convert Persian digits
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -244,7 +226,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^(🧠|AI)"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running (SSL Fix V3)...")
+    print("Bot Running (Separated Config)...")
     app.run_polling()
 
 if __name__ == "__main__":
