@@ -1,7 +1,5 @@
 python-telegram-bot
 flask
-pymongo[srv]
+pymongo
 certifi
 jdatetime
-pytz
-google-generativeai
