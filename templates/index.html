@@ -13,131 +13,149 @@
             --text-secondary: #777777;
             --accent-color: #3390ec;
             --danger-color: #e53935;
-            --success-color: #2ecc71;
             --radius: 16px;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
         body {
             background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
             color: var(--tg-theme-text-color, var(--text-primary));
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0; padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
         }
-        .container { max-width: 500px; margin: 0 auto; padding-bottom: 40px; }
-        
+        .container { max-width: 520px; margin: 0 auto; padding-bottom: 40px; }
         .clock-card {
             background: linear-gradient(135deg, #3390ec, #0078d7);
             color: white; padding: 20px; border-radius: 20px;
             box-shadow: 0 8px 20px rgba(51, 144, 236, 0.3);
             margin-bottom: 25px; text-align: center;
         }
-        .clock-time { font-size: 2.5em; font-weight: 700; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+        .clock-time { font-size: 2.5em; font-weight: 700; font-variant-numeric: tabular-nums; }
         .clock-date { font-size: 0.9em; opacity: 0.9; margin-top: 5px; }
-        
         .card {
             background: var(--tg-theme-bg-color, var(--card-bg));
             border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; gap: 12px;
         }
-        .card-info { flex-grow: 1; margin-left: 15px; }
-        .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
-        
-        .card-date-group { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+        .card-info { flex-grow: 1; }
+        .card-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 6px; word-break: break-word; }
+        .card-date-group { display: flex; flex-direction: column; font-size: 0.85rem; gap: 2px; }
         .date-row { display: flex; align-items: center; gap: 6px; }
-        .date-label { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; width: 40px; }
-        .date-val { font-weight: 500; font-family: monospace; font-size: 0.95rem; color: var(--text-primary); }
-
+        .date-label { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; width: 70px; flex-shrink: 0; }
+        .date-val { font-weight: 500; font-family: monospace; font-size: 0.9rem; color: var(--text-primary); }
         .card-badge {
             background: rgba(51, 144, 236, 0.1); color: var(--accent-color);
-            padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: bold;
-            min-width: 65px; text-align: center;
+            padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: bold;
+            min-width: 72px; text-align: center; white-space: nowrap;
         }
         .card-badge.urgent { background: rgba(229, 57, 53, 0.1); color: var(--danger-color); }
-        .card-badge.passed { background: rgba(0, 0, 0, 0.1); color: #666; }
-        
-        .empty-state { text-align: center; opacity: 0.5; padding: 40px 0; }
+        .empty-state { text-align: center; opacity: 0.6; padding: 40px 0; }
     </style>
 </head>
 <body>
-<div class="container">
+  <div class="container">
     <div class="clock-card">
-        <div class="clock-time" id="clock">00:00:00</div>
-        <div class="clock-date" id="date-display">Loading...</div>
+      <div class="clock-time" id="clock">00:00:00</div>
+      <div class="clock-date" id="date-display">Loading...</div>
     </div>
     <div id="content"></div>
-</div>
-<script>
+  </div>
+
+  <script>
+    // داده‌های تزریق شده از سمت سرور
+    const SERVER_USER_DATA = {{ user_data | tojson | safe }};
     const tg = window.Telegram.WebApp;
-    tg.expand();
-    
-    // Flask injects data here. Ignore IDE errors about syntax.
-    const userData = {{ user_data | tojson }};
+
+    // XSS Protection: Escape HTML characters
+    const escapeHTML = (str) => {
+        if (!str) return "";
+        return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    };
+
+    // Theme Handling
+    function applyTheme() {
+        if (!tg.themeParams) return;
+        const p = tg.themeParams;
+        const root = document.documentElement.style;
+        if(p.secondary_bg_color) root.setProperty("--bg-color", p.secondary_bg_color);
+        if(p.bg_color) root.setProperty("--card-bg", p.bg_color);
+        if(p.text_color) root.setProperty("--text-primary", p.text_color);
+        if(p.hint_color) root.setProperty("--text-secondary", p.hint_color);
+        if(p.button_color) root.setProperty("--accent-color", p.button_color);
+    }
 
     function updateClock() {
         const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour12: false});
-        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+        document.getElementById("clock").innerText = now.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        document.getElementById("date-display").innerText = now.toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
     }
-    setInterval(updateClock, 1000);
-    updateClock();
 
-    const contentDiv = document.getElementById('content');
-    let html = '';
-    
-    if(Object.keys(userData).length === 0) html = `<div class="empty-state">List is empty.</div>`;
-    else {
-        // Sort by date
-        const sortedKeys = Object.keys(userData).sort((a, b) => {
-            const dateA = userData[a].date.split('.').reverse().join('');
-            const dateB = userData[b].date.split('.').reverse().join('');
-            return dateA.localeCompare(dateB);
-        });
+    function startOfDay(date) {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
 
-        sortedKeys.forEach((key) => {
-            const item = userData[key];
-            // Parse Gregorian Date for countdown
-            const parts = item.date.split('.');
-            const target = new Date(parts[2], parts[1]-1, parts[0]);
-            const today = new Date();
-            today.setHours(0,0,0,0);
-            const diff = Math.ceil((target - today) / (86400000));
-            
-            let badgeText = `${diff} Days`;
-            let cls = 'card-badge';
-            
-            if (diff === 0) { badgeText = "Today"; cls += ' urgent'; }
-            else if (diff < 0) { badgeText = "Passed"; cls += ' passed'; }
-            else if (diff < 30) { cls += ' urgent'; }
+    function computeBadge(dateString) {
+        const parts = dateString.split(".");
+        if (parts.length !== 3) return { label: "Invalid", cls: "card-badge urgent" };
+        
+        const targetDate = new Date(parts[2], parts[1] - 1, parts[0]);
+        const today = startOfDay(new Date());
+        const target = startOfDay(targetDate);
+        
+        const diffDays = Math.round((target - today) / 86400000);
 
-            // Numeric Jalali from Server
-            let jalaliHtml = item.shamsi_date ? 
-                `<div class="date-row"><span class="date-label">IR:</span><span class="date-val">${item.shamsi_date}</span></div>` : '';
+        if (diffDays > 0) return { label: `${diffDays} Days`, cls: "card-badge" };
+        if (diffDays === 0) return { label: "Today", cls: "card-badge" };
+        return { label: "Passed", cls: "card-badge urgent" };
+    }
+
+    function renderList(data) {
+        const div = document.getElementById("content");
+        if (!div) return;
+        const keys = Object.keys(data || {});
+        if (keys.length === 0) {
+            div.innerHTML = `<div class="empty-state">List is empty.</div>`;
+            return;
+        }
+        
+        let html = "";
+        keys.forEach(key => {
+            const item = data[key];
+            const title = escapeHTML(item.title || "Untitled");
+            const dateG = escapeHTML(item.date || "");
+            const dateJ = escapeHTML(item.shamsi_date || "");
+            const badge = computeBadge(item.date || "");
 
             html += `
             <div class="card">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
-                    <div class="card-title">${item.title}</div>
+                    <div class="card-title">${title}</div>
                     <div class="card-date-group">
-                        <div class="date-row">
-                            <span class="date-label">EN:</span>
-                            <span class="date-val">${item.date}</span>
-                        </div>
-                        ${jalaliHtml}
+                        <div class="date-row"><span class="date-label">Gregorian:</span><span class="date-val">${dateG}</span></div>
+                        ${dateJ ? `<div class="date-row"><span class="date-label">Jalali:</span><span class="date-val">${dateJ}</span></div>` : ''}
                     </div>
                 </div>
-                <div class="${cls}">${badgeText}</div>
+                <div class="${badge.cls}">${badge.label}</div>
             </div>`;
         });
+        div.innerHTML = html;
     }
-    contentDiv.innerHTML = html;
 
-    // Apply Telegram Theme
-    if (tg.themeParams.bg_color) {
-        document.body.style.backgroundColor = tg.themeParams.secondary_bg_color || '#f4f6f8';
-        document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
-        document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
-    }
-</script>
+    // Init
+    tg.ready();
+    tg.expand();
+    applyTheme();
+    tg.onEvent('themeChanged', applyTheme);
+
+    // Back Button Logic (Optional navigation)
+    // tg.BackButton.hide(); // We are in root, so usually hidden
+
+    updateClock();
+    setInterval(updateClock, 1000);
+    renderList(SERVER_USER_DATA);
+  </script>
 </body>
 </html>
