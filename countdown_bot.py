@@ -7,10 +7,10 @@ from flask import Flask, render_template
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from pymongo import MongoClient
-import certifi  # IMPORANT
+import certifi
 import jdatetime
 import google.generativeai as genai
-import ssl # Added for explicit SSL context if needed
+import ssl
 
 app = Flask(__name__, template_folder='templates')
 
@@ -24,35 +24,34 @@ WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
-except Exception as e:
-    print(f"AI Config Error: {e}")
+except: pass
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- DATABASE CONNECTION (ROBUST SSL FIX) ---
+# --- DATABASE CONNECTION (FIXED SSL) ---
 try:
-    # We use certifi.where() to get the path to the correct CA bundle
-    ca = certifi.where()
-    
-    # Connect with tlsCAFile pointing to certifi's bundle
-    client = MongoClient(MONGO_URI, tlsCAFile=ca)
-    
-    # Test connection immediately to fail fast if wrong
+    # Explicitly set SSL context
+    client = MongoClient(
+        MONGO_URI,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=5000
+    )
+    # Force a connection attempt to verify
     client.admin.command('ping')
     
     db = client['time_manager_db']
     users_collection = db['users']
     logger.info("✅ Connected to MongoDB Successfully!")
 except Exception as e:
-    logger.error(f"❌ MongoDB Connection Critical Error: {e}")
-    # Fallback to in-memory if DB fails (prevents crash loop)
-    users_collection = None 
+    logger.error(f"❌ MongoDB Connection Failed: {e}")
+    users_collection = None # Fallback mode
 
 # --- FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is running (Robust SSL)"
+def home(): return "Bot is running (SSL Fix)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
@@ -72,9 +71,9 @@ def webapp(user_id):
 def run_server(): app.run(host='0.0.0.0', port=10000)
 def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
 
-# --- DATA HELPERS (With Fail-Safe) ---
+# --- DATA HELPERS ---
 def get_user_data(user_id):
-    if users_collection is None: return {"_id": str(user_id), "targets": {}} # Fail-safe
+    if users_collection is None: return {"_id": str(user_id), "targets": {}} # Memory fallback
     
     uid = str(user_id)
     try:
@@ -84,21 +83,16 @@ def get_user_data(user_id):
             users_collection.insert_one(new_data)
             return new_data
         return data
-    except Exception as e:
-        logger.error(f"DB Read Error: {e}")
-        return {"_id": uid, "targets": {}}
+    except: return {"_id": uid, "targets": {}}
 
 def update_user_data(user_id, data):
-    if users_collection is None: return # Fail-safe
-    try:
-        users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
-    except Exception as e:
-        logger.error(f"DB Write Error: {e}")
+    if users_collection is None: return
+    try: users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
+    except: pass
 
 # --- SMART DATE PARSER ---
 def parse_smart_date(date_str):
     date_str = date_str.replace('/', '.').replace('-', '.')
-    # Convert Persian digits
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -110,20 +104,15 @@ def parse_smart_date(date_str):
     
     try:
         p1, p2, p3 = int(parts[0]), int(parts[1]), int(parts[2])
-        
-        # Heuristic for Year position
         if p1 > 1000: y, m, d = p1, p2, p3
         elif p3 > 1000: y, m, d = p3, p2, p1
         else: return None, None
 
-        final_date = None
-        if y > 1900:
-            final_date = datetime(y, m, d)
-        elif y < 1500:
+        if y > 1900: final_date = datetime(y, m, d)
+        elif y < 1500: 
             j_date = jdatetime.date(y, m, d).togregorian()
             final_date = datetime(j_date.year, j_date.month, j_date.day)
-        else:
-            return None, None
+        else: return None, None
 
         return final_date.strftime("%d.%m.%Y")
     except: return None, None
@@ -177,7 +166,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ **Saved!**", reply_markup=get_main_kb(uid), parse_mode='Markdown')
         return ConversationHandler.END
     else:
-        await update.message.reply_text("❌ **Invalid Date.** Try again.", parse_mode='Markdown')
+        await update.message.reply_text("❌ **Invalid Date.**", parse_mode='Markdown')
         return 2
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -234,7 +223,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^(🧠|AI)"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running (Robust SSL)...")
+    print("Bot Running (SSL Fix V2)...")
     app.run_polling()
 
 if __name__ == "__main__":
