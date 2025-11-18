@@ -11,12 +11,11 @@ import certifi
 import jdatetime
 import google.generativeai as genai
 import ssl
-import config  # Importing configuration from config.py
+import config  # ✅ استفاده از فایل کانفیگ شما
 
 app = Flask(__name__, template_folder='templates')
 
-# --- CONFIGURATION IMPORT ---
-# We read variables from config.py now
+# --- CONFIGURATION FROM FILE ---
 BOT_TOKEN = config.BOT_TOKEN
 GEMINI_API_KEY = config.GEMINI_API_KEY
 MONGO_URI = config.MONGO_URI
@@ -33,6 +32,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 logger = logging.getLogger(__name__)
 
 # --- DATABASE CONNECTION (SSL ULTRA FIX) ---
+users_collection = None
 try:
     ca = certifi.where()
     client = MongoClient(
@@ -50,17 +50,19 @@ try:
     
 except Exception as e:
     logger.error(f"❌ CONNECTION FAILED: {e}")
+    # Fallback to memory if DB fails (prevents crash)
     users_collection = None 
 
 # --- FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is running (Config Separated)"
+def home(): return "Bot is running (Production Mode)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     data = get_user_data(user_id)
     targets = data.get('targets', {})
     
+    # Pre-calculate display dates
     for key, item in targets.items():
         try:
             g_date = datetime.strptime(item['date'], "%d.%m.%Y")
@@ -95,7 +97,10 @@ def update_user_data(user_id, data):
 
 # --- SMART DATE PARSER ---
 def parse_smart_date(date_str):
+    # 1. Normalize separators
     date_str = date_str.replace('/', '.').replace('-', '.')
+    
+    # 2. Convert Persian/Arabic digits to English
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -107,11 +112,17 @@ def parse_smart_date(date_str):
     
     try:
         p1, p2, p3 = int(parts[0]), int(parts[1]), int(parts[2])
+        
+        # Heuristic for Year
         if p1 > 1000: y, m, d = p1, p2, p3
         elif p3 > 1000: y, m, d = p3, p2, p1
         else: return None, None
 
-        if y > 1900: final_date = datetime(y, m, d)
+        final_date = None
+        # Gregorian
+        if y > 1900: 
+            final_date = datetime(y, m, d)
+        # Jalali (Shamsi)
         elif y < 1500: 
             j_date = jdatetime.date(y, m, d).togregorian()
             final_date = datetime(j_date.year, j_date.month, j_date.day)
@@ -148,7 +159,7 @@ async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message.text
     if msg == "❌ Cancel": return await cancel(update, context)
     context.user_data['title'] = msg
-    await update.message.reply_text("📅 **Enter Date:**\n(e.g. 2026.12.30 or 1405.10.10)", parse_mode='Markdown')
+    await update.message.reply_text("📅 **Enter Date:**\n(e.g., 2026.12.30 or 1405.10.20)", parse_mode='Markdown')
     return 2
 
 async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,7 +174,8 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data['targets'][new_id] = {
             "title": context.user_data['title'],
             "date": formatted_date,
-            "type": "personal"
+            "type": "personal",
+            "last_reminded": ""
         }
         update_user_data(uid, data)
         await update.message.reply_text("✅ **Saved!**", reply_markup=get_main_kb(uid), parse_mode='Markdown')
@@ -213,9 +225,44 @@ async def mentor_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(response.text, parse_mode='Markdown')
     except: await update.message.reply_text("⚠️ AI Error")
 
+# --- REMINDER JOB ---
+async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
+    if users_collection is None: return
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    all_users = users_collection.find()
+    
+    for user_data in all_users:
+        user_id = user_data['_id']
+        targets = user_data.get('targets', {})
+        modified = False
+        
+        for key, item in targets.items():
+            try:
+                t_date = datetime.strptime(item['date'], "%d.%m.%Y")
+                days_left = (t_date - datetime.now()).days + 1
+                
+                if days_left in [30, 7, 3, 1]:
+                    last = item.get('last_reminded', "")
+                    if last != today_str:
+                        msg = f"🔔 <b>Reminder!</b>\n📌 Event: <b>{item['title']}</b>\n⏳ Time left: <b>{days_left} days</b>"
+                        try:
+                            await context.bot.send_message(user_id, msg, parse_mode='HTML')
+                            item['last_reminded'] = today_str
+                            modified = True
+                        except: pass
+            except: continue
+        
+        if modified:
+            update_user_data(user_id, user_data)
+
 def main():
     keep_alive()
     app = Application.builder().token(BOT_TOKEN).build()
+    
+    # Background Jobs
+    job_queue = app.job_queue
+    job_queue.run_repeating(check_reminders, interval=3600, first=10)
+
     conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(➕|Add)"), add_start)],
         states={1: [MessageHandler(filters.TEXT, receive_title)], 2: [MessageHandler(filters.TEXT, receive_date)]},
@@ -226,7 +273,8 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^(🧠|AI)"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running (Separated Config)...")
+    
+    print("Bot Running (Config + MongoDB Fixed)...")
     app.run_polling()
 
 if __name__ == "__main__":
