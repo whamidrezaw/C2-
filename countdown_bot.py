@@ -14,7 +14,7 @@ import google.generativeai as genai
 app = Flask(__name__, template_folder='templates')
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
+BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
 GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM"
 MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
