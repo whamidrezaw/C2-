@@ -17,7 +17,10 @@ app = Flask(__name__, template_folder='templates')
 # --- CONFIGURATION ---
 BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
 GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM" 
+
+# لینک دیتابیس شما
 MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
+
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
 
 # Setup AI
@@ -30,34 +33,40 @@ except: pass
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- DATABASE CONNECTION (FIXED SSL) ---
+# --- DATABASE CONNECTION (SSL FIX v3) ---
+# این بخش تغییر کرده تا مشکل اتصال حل شود
 try:
-    # Explicitly set SSL context
+    # ایجاد کانتکست امنیتی دستی
+    ca = certifi.where()
+    
     client = MongoClient(
         MONGO_URI,
         tls=True,
-        tlsCAFile=certifi.where(),
-        serverSelectionTimeoutMS=5000
+        tlsCAFile=ca,
+        serverSelectionTimeoutMS=5000  # اگر تا 5 ثانیه وصل نشد ارور بدهد
     )
-    # Force a connection attempt to verify
+    
+    # تست اتصال (یک دستور ساده می‌فرستیم)
     client.admin.command('ping')
     
     db = client['time_manager_db']
     users_collection = db['users']
-    logger.info("✅ Connected to MongoDB Successfully!")
+    logger.info("✅✅✅ MONGODB CONNECTED SUCCESSFULLY! ✅✅✅")
+    
 except Exception as e:
-    logger.error(f"❌ MongoDB Connection Failed: {e}")
-    users_collection = None # Fallback mode
+    logger.error(f"❌❌❌ DATABASE CONNECTION FAILED: {e}")
+    users_collection = None
 
 # --- FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is running (SSL Fix)"
+def home(): return "Bot is running (Database Fixed)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     data = get_user_data(user_id)
     targets = data.get('targets', {})
     
+    # تاریخ شمسی برای نمایش
     for key, item in targets.items():
         try:
             g_date = datetime.strptime(item['date'], "%d.%m.%Y")
@@ -73,7 +82,10 @@ def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
 
 # --- DATA HELPERS ---
 def get_user_data(user_id):
-    if users_collection is None: return {"_id": str(user_id), "targets": {}} # Memory fallback
+    # اگر دیتابیس وصل نبود، موقتاً یک دیکشنری خالی بده تا ربات کرش نکند
+    if users_collection is None: 
+        logger.warning("⚠️ Database offline, returning empty data.")
+        return {"_id": str(user_id), "targets": {}}
     
     uid = str(user_id)
     try:
@@ -83,16 +95,25 @@ def get_user_data(user_id):
             users_collection.insert_one(new_data)
             return new_data
         return data
-    except: return {"_id": uid, "targets": {}}
+    except Exception as e:
+        logger.error(f"Read Error: {e}")
+        return {"_id": uid, "targets": {}}
 
 def update_user_data(user_id, data):
-    if users_collection is None: return
-    try: users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
-    except: pass
+    if users_collection is None: 
+        logger.error("⚠️ Cannot save data: Database offline.")
+        return
+        
+    try:
+        users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
+        logger.info(f"✅ Data saved for user {user_id}")
+    except Exception as e:
+        logger.error(f"❌ Write Error: {e}")
 
 # --- SMART DATE PARSER ---
 def parse_smart_date(date_str):
     date_str = date_str.replace('/', '.').replace('-', '.')
+    # Convert Persian digits
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
@@ -166,7 +187,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ **Saved!**", reply_markup=get_main_kb(uid), parse_mode='Markdown')
         return ConversationHandler.END
     else:
-        await update.message.reply_text("❌ **Invalid Date.**", parse_mode='Markdown')
+        await update.message.reply_text("❌ **Invalid Date.** Try again.", parse_mode='Markdown')
         return 2
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -223,7 +244,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^(🧠|AI)"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running (SSL Fix V2)...")
+    print("Bot Running (SSL Fix V3)...")
     app.run_polling()
 
 if __name__ == "__main__":
