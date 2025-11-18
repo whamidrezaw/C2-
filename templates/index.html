@@ -81,11 +81,6 @@
         .card-badge.urgent { background: rgba(229, 57, 53, 0.1); color: var(--danger-color); }
 
         .empty-state { text-align: center; opacity: 0.5; padding: 40px 0; }
-        .quote-section {
-            margin-top: 30px; text-align: center; font-style: italic;
-            color: var(--text-secondary); font-size: 0.9rem;
-            padding: 20px; background: rgba(0,0,0,0.02); border-radius: 15px;
-        }
     </style>
 </head>
 <body>
@@ -96,7 +91,6 @@
         <div class="clock-date" id="date-display">Loading...</div>
     </div>
     <div id="content"></div>
-    <div class="quote-section" id="quote-box"></div>
 </div>
 
 <script>
@@ -105,22 +99,20 @@
 
     const userData = {{ user_data | tojson }};
     
-    // --- تشخیص خودکار زبان از تلگرام ---
-    // tg.initDataUnsafe.user.language_code معمولاً 'fa', 'en', 'de' برمی‌گرداند
+    // تشخیص زبان تلگرام (پیش‌فرض انگلیسی)
     let userLang = (tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code) ? tg.initDataUnsafe.user.language_code : 'en';
 
-    // اگر زبان ناشناخته بود، انگلیسی شود
-    if (userLang !== 'fa' && userLang !== 'de') userLang = 'en';
-
     const i18n = {
+        en: { dir: 'ltr', p: '📌 Personal', o: '🚧 Official', e: '🎉 Events', empty: 'List is empty.', days: 'days', today: 'Today!', passed: 'Passed', locale: 'en-US' },
+        de: { dir: 'ltr', p: '📌 Persönlich', o: '🚧 Behörden', e: '🎉 Ereignisse', empty: 'Liste ist leer.', days: 'Tage', today: 'Heute!', passed: 'Vorbei', locale: 'de-DE' },
         fa: { dir: 'rtl', p: '📌 شخصی', o: '🚧 رسمی', e: '🎉 مناسبت‌ها', empty: 'لیست خالی است.', days: 'روز', today: 'امروز!', passed: 'گذشته', locale: 'fa-IR' },
-        de: { dir: 'ltr', p: '📌 Persönlich', o: '🚧 Behörden', e: '🎉 Ereignisse', empty: 'Liste leer.', days: 'Tage', today: 'Heute!', passed: 'Vorbei', locale: 'de-DE' },
-        en: { dir: 'ltr', p: '📌 Personal', o: '🚧 Official', e: '🎉 Events', empty: 'List empty.', days: 'days', today: 'Today!', passed: 'Passed', locale: 'en-US' }
+        ar: { dir: 'rtl', p: '📌 شخصي', o: '🚧 رسمي', e: '🎉 أحداث', empty: 'القائمة فارغة.', days: 'أيام', today: 'اليوم!', passed: 'انقضى', locale: 'ar-SA' },
+        tr: { dir: 'ltr', p: '📌 Kişisel', o: '🚧 Resmi', e: '🎉 Etkinlikler', empty: 'Liste boş.', days: 'gün', today: 'Bugün!', passed: 'Geçti', locale: 'tr-TR' }
     };
 
-    const t = i18n[userLang];
+    // انتخاب زبان (اگر در لیست نبود، انگلیسی شود)
+    const t = i18n[userLang] || i18n.en;
 
-    // اعمال راست‌چین/چپ‌چین
     if (t.dir === 'rtl') document.body.classList.add('rtl');
 
     // --- ساعت ---
@@ -139,8 +131,8 @@
 
     for (const [key, item] of Object.entries(userData)) {
         const type = item.type || 'personal';
-        // انتخاب عنوان بر اساس زبان تشخیص داده شده
-        let title = item.labels ? (item.labels[userLang] || item.labels['en']) : "Event";
+        // انتخاب عنوان متناسب با زبان
+        let title = item.labels ? (item.labels[userLang] || item.labels['en']) : (item.de_label || "Event");
         
         const obj = { ...item, title: title };
         if (type === 'official') official.push(obj);
