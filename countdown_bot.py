@@ -7,14 +7,25 @@ from flask import Flask, render_template
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from deep_translator import GoogleTranslator
+from pymongo import MongoClient
+import certifi
 
 app = Flask(__name__, template_folder='templates')
 
 # --- CONFIGURATION ---
+# 1. توکن تلگرام
 BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
-GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM" 
+
+# 2. کلید جمینی
+GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM"
+
+# 3. آدرس سایت رندر
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
-DATA_FILE = "users_data.json"
+
+# 4. آدرس دیتابیس مونگو (حتما جایگذاری کنید)
+# مثال: "mongodb+srv://admin:password123@cluster0..."
+MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
 
 # تنظیم جمینی
 genai.configure(api_key=GEMINI_API_KEY)
@@ -23,12 +34,22 @@ model = genai.GenerativeModel('gemini-pro')
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- DATABASE CONNECTION (MONGODB) ---
+try:
+    # اتصال به دیتابیس با استفاده از گواهی امنیتی certifi
+    client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    db = client['time_manager_db']  # اسم دیتابیس
+    users_collection = db['users']  # اسم کالکشن (جدول) کاربران
+    print("✅ Connected to MongoDB Successfully!")
+except Exception as e:
+    print(f"❌ MongoDB Connection Error: {e}")
+
 # --- UI TEXTS ---
 UI = {
     "en": { 
         "open": "📱 Open App", "add": "➕ Add Event", "del": "🗑 Delete", "mentor": "🧠 AI Mentor",
         "welcome": "👋 Welcome! Manage your time smartly.",
-        "ask_name": "📝 Event Name:", "translating": "✨ AI Translating...",
+        "ask_name": "📝 Event Name:", "translating": "✨ Translating...",
         "ask_date": "📅 Date (DD.MM.YYYY):", "saved": "✅ Saved!",
         "error": "❌ Error!", "cancel": "❌ Cancel", "empty": "📭 List is empty.",
         "del_ask": "🗑 Delete which one?", "deleted": "✅ Deleted.", "not_found": "❌ Not found.",
@@ -38,7 +59,7 @@ UI = {
     "de": {
         "open": "📱 App öffnen", "add": "➕ Hinzufügen", "del": "🗑 Löschen", "mentor": "🧠 KI-Mentor",
         "welcome": "👋 Willkommen!", "ask_name": "📝 Ereignisname:", 
-        "translating": "✨ KI übersetzt...", "ask_date": "📅 Datum (TT.MM.JJJJ):",
+        "translating": "✨ Übersetzung...", "ask_date": "📅 Datum (TT.MM.JJJJ):",
         "saved": "✅ Gespeichert!", "error": "❌ Fehler!", "cancel": "❌ Abbrechen",
         "empty": "📭 Leer.", "del_ask": "🗑 Löschen:", "deleted": "✅ Gelöscht.", "not_found": "❌ Nicht gefunden.",
         "mentor_thinking": "🧠 Ich denke nach...",
@@ -47,7 +68,7 @@ UI = {
     "fa": {
         "open": "📱 مشاهده برنامه", "add": "➕ افزودن", "del": "🗑 حذف", "mentor": "🧠 مشاور هوشمند",
         "welcome": "👋 خوش آمدید!", "ask_name": "📝 نام رویداد:", 
-        "translating": "✨ هوش مصنوعی در حال ترجمه...", "ask_date": "📅 تاریخ (DD.MM.YYYY):",
+        "translating": "✨ در حال ترجمه...", "ask_date": "📅 تاریخ (DD.MM.YYYY):",
         "saved": "✅ ذخیره شد!", "error": "❌ خطا!", "cancel": "❌ انصراف",
         "empty": "📭 لیست خالی است.", "del_ask": "🗑 انتخاب برای حذف:", "deleted": "✅ حذف شد.", "not_found": "❌ پیدا نشد.",
         "mentor_thinking": "🧠 در حال تحلیل...",
@@ -65,7 +86,7 @@ UI = {
     "tr": {
         "open": "📱 Uygulama", "add": "➕ Ekle", "del": "🗑 Sil", "mentor": "🧠 AI Mentor",
         "welcome": "👋 Hoş geldiniz!", "ask_name": "📝 Etkinlik adı:", 
-        "translating": "✨ Yapay Zeka...", "ask_date": "📅 Tarih (GG.AA.YYYY):",
+        "translating": "✨ Çeviriliyor...", "ask_date": "📅 Tarih (GG.AA.YYYY):",
         "saved": "✅ Kaydedildi!", "error": "❌ Hata!", "cancel": "❌ İptal",
         "empty": "📭 Boş.", "del_ask": "🗑 Sil:", "deleted": "✅ Silindi.", "not_found": "❌ Bulunamadı.",
         "mentor_thinking": "🧠 Düşünüyorum...",
@@ -75,46 +96,40 @@ UI = {
 
 # --- SERVER ---
 @app.route('/')
-def home(): return "Bot Alive (Mentor + AI Translation)"
+def home(): return "Bot Alive (MongoDB)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     data = get_user_data(user_id)
-    return render_template('index.html', user_data=data.get('targets', {}))
+    return render_template('index.html', user_data=data.get('targets', {}), lang=data.get('lang', 'en'))
 
 def run_web_server(): app.run(host='0.0.0.0', port=10000)
 def keep_alive(): threading.Thread(target=run_web_server, daemon=True).start()
 
-# --- DATA MANAGER ---
-DATA = {}
-def load_data():
-    global DATA
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f: DATA = json.load(f)
-        except: DATA = {}
-def save_data():
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f: json.dump(DATA, f, ensure_ascii=False, indent=4)
-    except: pass
+# --- DATA MANAGER (MONGODB) ---
+# دیگر فایل جیسون نداریم، مستقیم با دیتابیس کار میکنیم
 
 def get_user_data(uid):
     uid = str(uid)
-    if uid not in DATA:
-        DATA[uid] = {"targets": {}}
-        save_data()
-    return DATA[uid]
+    # جستجو در دیتابیس
+    data = users_collection.find_one({"_id": uid})
+    
+    if not data:
+        # اگر کاربر جدید بود، بساز
+        new_data = {"_id": uid, "targets": {}, "lang": "en"}
+        users_collection.insert_one(new_data)
+        return new_data
+    
+    return data
 
 def update_user_data(uid, val):
-    DATA[str(uid)] = val
-    save_data()
-load_data()
+    # بروزرسانی در دیتابیس
+    users_collection.update_one({"_id": str(uid)}, {"$set": val}, upsert=True)
 
 # --- HELPERS ---
 def get_text(lang, key):
     return UI.get(lang, UI["en"]).get(key, UI["en"][key])
 
-# --- AI TRANSLATOR (REPLACED deep_translator) ---
 def translate_with_ai(text):
     try:
         prompt = f"""Translate '{text}' to English, German, Persian, Arabic, Turkish. Return JSON keys: en, de, fa, ar, tr."""
@@ -132,11 +147,14 @@ def get_kb(uid, lang):
         [KeyboardButton(get_text(lang, "add")), KeyboardButton(get_text(lang, "del"))]
     ], resize_keyboard=True)
 
+# --- HANDLERS ---
+GET_TITLE, GET_DATE = range(2)
+
 # --- MENTOR ---
 async def mentor_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     data = get_user_data(user.id)
-    lang = user.language_code
+    lang = data.get('lang', 'en')
     targets = data.get('targets', {})
 
     if not targets: return await update.message.reply_text(get_text(lang, "empty"))
@@ -155,9 +173,11 @@ async def mentor_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- REMINDER JOB ---
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
     today_str = datetime.now().strftime("%Y-%m-%d")
-    all_data_copy = DATA.copy()
+    # دریافت همه کاربران از دیتابیس
+    all_users = users_collection.find()
     
-    for user_id, user_data in all_data_copy.items():
+    for user_data in all_users:
+        user_id = user_data['_id']
         targets = user_data.get('targets', {})
         lang = user_data.get('lang', 'en')
         modified = False
@@ -182,7 +202,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         if modified:
             update_user_data(user_id, user_data)
 
-# --- HANDLERS ---
+# --- STANDARD HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     data = get_user_data(user.id)
@@ -214,8 +234,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data['targets'][new_id] = {
             "date": update.message.text,
             "labels": context.user_data['titles'],
-            "icon": "📌", "type": "personal",
-            "last_reminded": ""
+            "icon": "📌", "type": "personal"
         }
         update_user_data(uid, data)
         await update.message.reply_text(get_text(lang, "saved"), reply_markup=get_kb(uid, lang))
@@ -234,6 +253,7 @@ async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = update.effective_user.language_code
     data = get_user_data(uid)
     if not data['targets']: return await update.message.reply_text(get_text(lang, "empty"))
+    
     kb = []
     for k, v in data['targets'].items():
         label = v['labels'].get(lang, v['labels']['en'])
@@ -269,7 +289,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🧠"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running on AI...")
+    print("Bot Running on MongoDB...")
     app.run_polling()
 
 if __name__ == "__main__":
