@@ -6,3 +6,4 @@ pytz
 google-generativeai
 pymongo
 certifi
+hijri-converter
