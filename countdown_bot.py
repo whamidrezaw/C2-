@@ -2,61 +2,68 @@ import logging
 import threading
 import json
 import os
+import google.generativeai as genai
 from flask import Flask, render_template
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from deep_translator import GoogleTranslator
 
 app = Flask(__name__, template_folder='templates')
 
 # --- CONFIG ---
-# 1. توکن ربات را اینجا بگذارید:
+# 1. توکن تلگرام
 BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
 
-# 2. آدرس سایت رندر خود را اینجا بگذارید (با https):
+# 2. کلید هوش مصنوعی جمینی (اینجا وارد کنید)
+GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM" 
+
+# 3. آدرس سایت رندر
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
 
 DATA_FILE = "users_data.json"
 
+# تنظیم جمینی
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro')
+
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- UI TEXTS (5 Languages) ---
+# --- UI TEXTS ---
 UI = {
     "en": { 
         "open": "📱 Open App", "add": "➕ Add Event", "del": "🗑 Delete",
         "welcome": "👋 Welcome! Manage your time smartly.",
-        "ask_name": "📝 Enter event name (Auto-Translate):", "translating": "🔄 Translating...",
+        "ask_name": "📝 Enter event name (I will translate it):", "translating": "✨ AI is thinking & translating...",
         "ask_date": "📅 Enter Date (DD.MM.YYYY):", "saved": "✅ Saved!",
         "error": "❌ Error! Use DD.MM.YYYY", "cancel": "❌ Cancel", "empty": "📭 Empty.",
         "del_ask": "🗑 Delete which one?", "deleted": "✅ Deleted.", "not_found": "❌ Not found."
     },
     "de": {
         "open": "📱 App öffnen", "add": "➕ Hinzufügen", "del": "🗑 Löschen",
-        "welcome": "👋 Willkommen!", "ask_name": "📝 Ereignisname:", 
-        "translating": "🔄 Übersetzung...", "ask_date": "📅 Datum (TT.MM.JJJJ):",
+        "welcome": "👋 Willkommen!", "ask_name": "📝 Ereignisname (Ich übersetze es):", 
+        "translating": "✨ KI übersetzt...", "ask_date": "📅 Datum (TT.MM.JJJJ):",
         "saved": "✅ Gespeichert!", "error": "❌ Fehler! TT.MM.JJJJ", "cancel": "❌ Abbrechen",
         "empty": "📭 Leer.", "del_ask": "🗑 Löschen:", "deleted": "✅ Gelöscht.", "not_found": "❌ Nicht gefunden."
     },
     "fa": {
         "open": "📱 مشاهده برنامه", "add": "➕ افزودن رویداد", "del": "🗑 حذف رویداد",
-        "welcome": "👋 خوش آمدید!", "ask_name": "📝 نام رویداد (هر زبانی):", 
-        "translating": "🔄 در حال ترجمه...", "ask_date": "📅 تاریخ (DD.MM.YYYY):",
+        "welcome": "👋 خوش آمدید!", "ask_name": "📝 نام رویداد (به هر زبانی، هوش مصنوعی ترجمه می‌کند):", 
+        "translating": "✨ هوش مصنوعی در حال ترجمه...", "ask_date": "📅 تاریخ (DD.MM.YYYY):",
         "saved": "✅ ذخیره شد!", "error": "❌ فرمت اشتباه!", "cancel": "❌ انصراف",
         "empty": "📭 خالی است.", "del_ask": "🗑 انتخاب برای حذف:", "deleted": "✅ حذف شد.", "not_found": "❌ پیدا نشد."
     },
     "ar": {
         "open": "📱 فتح التطبيق", "add": "➕ إضافة", "del": "🗑 حذف",
         "welcome": "👋 أهلاً بك!", "ask_name": "📝 اسم الحدث:", 
-        "translating": "🔄 ترجمة...", "ask_date": "📅 التاريخ (DD.MM.YYYY):",
+        "translating": "✨ الذكاء الاصطناعي يترجم...", "ask_date": "📅 التاريخ (DD.MM.YYYY):",
         "saved": "✅ تم الحفظ!", "error": "❌ خطأ!", "cancel": "❌ إلغاء",
         "empty": "📭 فارغ.", "del_ask": "🗑 اختر للحذف:", "deleted": "✅ تم الحذف.", "not_found": "❌ غير موجود."
     },
     "tr": {
         "open": "📱 Uygulama", "add": "➕ Ekle", "del": "🗑 Sil",
         "welcome": "👋 Hoş geldiniz!", "ask_name": "📝 Etkinlik adı:", 
-        "translating": "🔄 Çeviriliyor...", "ask_date": "📅 Tarih (GG.AA.YYYY):",
+        "translating": "✨ Yapay Zeka Çeviriyor...", "ask_date": "📅 Tarih (GG.AA.YYYY):",
         "saved": "✅ Kaydedildi!", "error": "❌ Hata!", "cancel": "❌ İptal",
         "empty": "📭 Boş.", "del_ask": "🗑 Seçin:", "deleted": "✅ Silindi.", "not_found": "❌ Bulunamadı."
     }
@@ -64,7 +71,7 @@ UI = {
 
 # --- SERVER ROUTES ---
 @app.route('/')
-def home(): return "Bot Alive"
+def home(): return "Bot Alive (AI Powered)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
@@ -103,16 +110,26 @@ load_data()
 def get_text(lang, key):
     return UI.get(lang, UI["en"]).get(key, UI["en"][key])
 
-def translate_all(text):
+# --- AI TRANSLATOR (GEMINI) ---
+def translate_with_ai(text):
+    """
+    از جمینی می‌خواهد که متن را همزمان به ۵ زبان ترجمه کند و جیسون برگرداند.
+    """
     try:
-        return {
-            "en": GoogleTranslator(source='auto', target='en').translate(text),
-            "de": GoogleTranslator(source='auto', target='de').translate(text),
-            "fa": GoogleTranslator(source='auto', target='fa').translate(text),
-            "ar": GoogleTranslator(source='auto', target='ar').translate(text),
-            "tr": GoogleTranslator(source='auto', target='tr').translate(text)
-        }
-    except: return {"en": text, "de": text, "fa": text, "ar": text, "tr": text}
+        prompt = f"""
+        Translate the text "{text}" into English, German, Persian, Arabic, and Turkish.
+        Return ONLY a JSON object with keys: en, de, fa, ar, tr.
+        Example format: {{"en": "Exam", "de": "Prüfung", "fa": "آزمون", "ar": "امتحان", "tr": "Sınav"}}
+        Do not write markdown codes. Just the JSON string.
+        """
+        response = model.generate_content(prompt)
+        # تمیز کردن پاسخ (گاهی مدل ```json می‌گذارد که باید حذف شود)
+        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json)
+    except Exception as e:
+        logger.error(f"AI Error: {e}")
+        # در صورت خطا، متن اصلی را برمی‌گرداند
+        return {"en": text, "de": text, "fa": text, "ar": text, "tr": text}
 
 # --- KEYBOARD ---
 def get_kb(uid, lang):
@@ -140,8 +157,12 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = update.effective_user.language_code
     if "❌" in update.message.text: return await cancel(update, context)
+    
     await update.message.reply_text(get_text(lang, "translating"))
-    context.user_data['titles'] = translate_all(update.message.text)
+    
+    # استفاده از هوش مصنوعی
+    context.user_data['titles'] = translate_with_ai(update.message.text)
+    
     await update.message.reply_text(get_text(lang, "ask_date"))
     return GET_DATE
 
@@ -181,7 +202,7 @@ async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = []
     for k, v in data['targets'].items():
         label = v['labels'].get(lang, v['labels']['en'])
-        kb.append([InlineKeyboardButton(f"❌ {label}", callback_data=f"del_{k}")])
+        kb.append([InlineKeyboardButton(f"❌ {label} ({v['date']})", callback_data=f"del_{k}")])
     await update.message.reply_text(get_text(lang, "del_ask"), reply_markup=InlineKeyboardMarkup(kb))
 
 async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -209,7 +230,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^🗑"), delete_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    print("Bot Running Universal...")
+    print("Running AI Bot...")
     app.run_polling()
 
 if __name__ == "__main__":

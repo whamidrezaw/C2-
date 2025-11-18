@@ -3,4 +3,4 @@ python-dateutil
 flask
 jdatetime
 pytz
-deep-translator
+google-generativeai
