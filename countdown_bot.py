@@ -5,35 +5,34 @@ import jdatetime
 import pytz
 import json
 import os
-import copy
-from flask import Flask, render_template, request # render_template اضافه شد
+from flask import Flask, render_template
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from deep_translator import GoogleTranslator
 
-# ==========================================
-# بخش ۱: سرور و مینی اپ
-# ==========================================
-# تنظیم پوشه تمپلیت برای Flask
 app = Flask(__name__, template_folder='templates')
 
-# مسیر اصلی (برای زنده ماندن ربات)
+# --- CONFIG ---
+BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
+DATA_FILE = "users_data.json"
+# آدرس سایت رندر خود را اینجا بگذارید
+WEBAPP_URL_BASE = "https://my-bot-new.onrender.com" 
+
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- ROUTES ---
 @app.route('/')
 def home():
     return "Bot is alive!"
 
-# مسیر مینی اپ (اینجا HTML نمایش داده می‌شود)
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
-    # دریافت اطلاعات کاربر از فایل
     data = get_user_data(user_id)
-    targets = data.get("targets", {})
-    lang = data.get("lang", "en")
-    
     # ارسال داده‌ها به HTML
-    return render_template('index.html', user_data=targets, lang=lang)
+    return render_template('index.html', user_data=data.get('targets', {}), lang=data.get('lang', 'en'))
 
 def run_web_server():
     app.run(host='0.0.0.0', port=10000)
@@ -43,46 +42,24 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# ==========================================
-# بخش ۲: تنظیمات
-# ==========================================
-BOT_TOKEN = "8562902859:AAEIBDk6cYEf6efIGJi8GSNTMaCQMuxlGLU"
-DATA_FILE = "users_data.json"
-# آدرس سایت رندر شما (بسیار مهم)
-# بعد از دیپلوی، آدرس سایت خود را اینجا بگذارید. الان موقتی میگذاریم
-WEBAPP_URL_BASE = "https://my-bot-new.onrender.com" 
-
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# (بقیه تنظیمات ثابت می‌ماند)
-TZ_GERMANY = pytz.timezone('Europe/Berlin')
-TZ_IRAN = pytz.timezone('Asia/Tehran')
-GET_TITLE, GET_DATE = range(2)
-
+# --- DATA MANAGER ---
 DEFAULT_TARGETS = {}
 all_users_data = {}
 
-# ==========================================
-# بخش ۳: مدیریت داده
-# ==========================================
 def load_data():
     global all_users_data
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 all_users_data = json.load(f)
-        except Exception:
-            all_users_data = {}
-    else:
-        all_users_data = {}
+        except: all_users_data = {}
+    else: all_users_data = {}
 
 def save_data():
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(all_users_data, f, ensure_ascii=False, indent=4)
-    except Exception:
-        pass
+    except: pass
 
 def get_user_data(user_id):
     user_id = str(user_id)
@@ -92,124 +69,125 @@ def get_user_data(user_id):
     return all_users_data[user_id]
 
 def update_user_data(user_id, data):
-    user_id = str(user_id)
-    all_users_data[user_id] = data
+    all_users_data[str(user_id)] = data
     save_data()
 
 load_data()
 
-# ==========================================
-# بخش ۴: مترجم
-# ==========================================
+# --- TRANSLATOR ---
 def translate_all(text):
     try:
         en = GoogleTranslator(source='auto', target='en').translate(text)
         de = GoogleTranslator(source='auto', target='de').translate(text)
         fa = GoogleTranslator(source='auto', target='fa').translate(text)
         return {"en": en, "de": de, "fa": fa}
-    except:
-        return {"en": text, "de": text, "fa": text}
+    except: return {"en": text, "de": text, "fa": text}
 
-# ==========================================
-# بخش ۵: کیبوردها (با دکمه مینی اپ)
-# ==========================================
+# --- BOT LOGIC ---
+GET_TITLE, GET_DATE = range(2)
 
-def get_main_menu_keyboard(user_id):
-    # ساخت آدرس اختصاصی برای هر کاربر
-    user_url = f"{WEBAPP_URL_BASE}/webapp/{user_id}"
-    
-    keyboard = [
-        [KeyboardButton("📱 مشاهده در مینی‌اپ", web_app=WebAppInfo(url=user_url))],
+def get_main_kb(user_id):
+    url = f"{WEBAPP_URL_BASE}/webapp/{user_id}"
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("📱 مشاهده در مینی‌اپ (WebApp)", web_app=WebAppInfo(url=url))],
         [KeyboardButton("➕ افزودن"), KeyboardButton("🗑 حذف")],
         [KeyboardButton("🇩🇪 DE"), KeyboardButton("🇬🇧 EN"), KeyboardButton("🇮🇷 FA")]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    ], resize_keyboard=True)
 
-# ==========================================
-# بخش ۶: هندلرهای افزودن
-# ==========================================
-async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("📝 نام رویداد؟ (فارسی یا آلمانی)", reply_markup=ReplyKeyboardMarkup([["❌"]], resize_keyboard=True))
-    return GET_TITLE
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    get_user_data(user_id)
+    await update.message.reply_text("👋 به ربات مدیریت زمان خوش آمدید!", reply_markup=get_main_kb(user_id))
 
-async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌":
-        user_id = update.effective_user.id
-        await update.message.reply_text("لغو شد.", reply_markup=get_main_menu_keyboard(user_id))
-        return ConversationHandler.END
-    
-    await update.message.reply_text("🔄 ...")
-    titles = translate_all(update.message.text)
-    context.user_data['titles'] = titles
-    await update.message.reply_text(f"✅ عنوان ثبت شد.\n📅 تاریخ؟ (DD.MM.YYYY)")
-    return GET_DATE
-
-async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
-    
-    if text == "❌":
-        await update.message.reply_text("لغو شد.", reply_markup=get_main_menu_keyboard(user_id))
-        return ConversationHandler.END
-    
+    data = get_user_data(user_id)
+    if "DE" in text: data['lang'] = 'de'
+    elif "FA" in text: data['lang'] = 'fa'
+    else: data['lang'] = 'en'
+    update_user_data(user_id, data)
+    await update.message.reply_text(f"Language: {data['lang']}", reply_markup=get_main_kb(user_id))
+
+# --- ADD SCENARIO ---
+async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📝 نام رویداد؟ (هر زبانی)", reply_markup=ReplyKeyboardMarkup([["❌"]], resize_keyboard=True))
+    return GET_TITLE
+
+async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "❌": return await cancel(update, context)
+    await update.message.reply_text("🔄 ...")
+    context.user_data['titles'] = translate_all(update.message.text)
+    await update.message.reply_text("📅 تاریخ؟ (DD.MM.YYYY)")
+    return GET_DATE
+
+async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "❌": return await cancel(update, context)
     try:
-        datetime.strptime(text, "%d.%m.%Y")
-        user_data = get_user_data(user_id)
+        datetime.strptime(update.message.text, "%d.%m.%Y")
+        user_id = update.effective_user.id
+        data = get_user_data(user_id)
         new_id = f"evt_{int(datetime.now().timestamp())}"
-        user_data['targets'][new_id] = {
-            "date": text,
+        data['targets'][new_id] = {
+            "date": update.message.text,
             "labels": context.user_data['titles'],
-            "icon": "📌",
-            "type": "personal"
+            "icon": "📌", "type": "personal"
         }
-        update_user_data(user_id, user_data)
-        await update.message.reply_text("✅ اضافه شد!", reply_markup=get_main_menu_keyboard(user_id))
+        update_user_data(user_id, data)
+        await update.message.reply_text("✅ ذخیره شد!", reply_markup=get_main_kb(user_id))
         return ConversationHandler.END
     except:
         await update.message.reply_text("❌ فرمت اشتباه: DD.MM.YYYY")
         return GET_DATE
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_id = update.effective_user.id
-    await update.message.reply_text("لغو.", reply_markup=get_main_menu_keyboard(user_id))
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("لغو شد.", reply_markup=get_main_kb(update.effective_user.id))
     return ConversationHandler.END
 
-# ==========================================
-# بخش ۷: هندلرهای اصلی
-# ==========================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# --- DELETE SCENARIO (Simple) ---
+async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    get_user_data(user_id)
-    await update.message.reply_text("👋 خوش آمدید! از دکمه‌های زیر استفاده کنید:", reply_markup=get_main_menu_keyboard(user_id))
+    data = get_user_data(user_id)
+    if not data['targets']:
+        return await update.message.reply_text("لیست خالی است.")
+    
+    kb = []
+    for k, v in data['targets'].items():
+        label = v['labels'].get(data['lang'], v['labels']['en'])
+        kb.append([InlineKeyboardButton(f"❌ {label}", callback_data=f"del_{k}")])
+    await update.message.reply_text("حذف کدام؟", reply_markup=InlineKeyboardMarkup(kb))
 
-async def handle_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.message.text
+async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     user_id = update.effective_user.id
-    user_data = get_user_data(user_id)
-    
-    if "DE" in text: user_data['lang'] = "de"
-    elif "FA" in text: user_data['lang'] = "fa"
-    elif "EN" in text: user_data['lang'] = "en"
-    
-    update_user_data(user_id, user_data)
-    await update.message.reply_text(f"Language changed to {user_data['lang']}", reply_markup=get_main_menu_keyboard(user_id))
+    data = get_user_data(user_id)
+    key = query.data.replace("del_", "")
+    if key in data['targets']:
+        del data['targets'][key]
+        update_user_data(user_id, data)
+        await query.answer("حذف شد.")
+        await query.delete_message()
+    else:
+        await query.answer("یافت نشد.")
 
-def main() -> None:
+def main():
     keep_alive()
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    conv_handler = ConversationHandler(
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(➕|Add|Hinzufügen)"), add_start)],
         states={GET_TITLE: [MessageHandler(filters.TEXT, receive_title)], GET_DATE: [MessageHandler(filters.TEXT, receive_date)]},
-        fallbacks=[MessageHandler(filters.ALL, cancel)],
+        fallbacks=[MessageHandler(filters.ALL, cancel)]
     )
-
-    application.add_handler(conv_handler)
-    application.add_handler(MessageHandler(filters.Regex("^(🇩🇪|🇮🇷|🇬🇧)"), handle_lang))
-    application.add_handler(CommandHandler("start", start))
     
-    print("Bot Started with Mini App...")
-    application.run_polling()
+    app.add_handler(conv)
+    app.add_handler(MessageHandler(filters.Regex("^(🇩🇪|🇮🇷|🇬🇧)"), handle_lang))
+    app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_trigger))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(delete_cb))
+    
+    print("Running...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()

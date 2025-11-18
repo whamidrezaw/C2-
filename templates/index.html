@@ -1,144 +1,320 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Time Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        :root {
+            --bg-color: #f4f6f8;
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #777777;
+            --accent-color: #3390ec;
+            --danger-color: #e53935;
+            --success-color: #43a047;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --radius: 16px;
+        }
+
         body {
-            background-color: var(--tg-theme-bg-color, #fff);
-            color: var(--tg-theme-text-color, #000);
-            font-family: Tahoma, Arial, sans-serif;
+            background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
+            color: var(--tg-theme-text-color, var(--text-primary));
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            user-select: none;
+            transition: all 0.3s ease;
         }
+
+        /* فونت فارسی */
+        body.rtl {
+            font-family: "Tahoma", "Vazir", "Segoe UI", sans-serif;
+            direction: rtl;
+        }
+
         .container {
-            max-width: 600px;
+            max-width: 500px;
             margin: 0 auto;
+            padding-bottom: 40px;
         }
-        h2 {
+
+        /* هدر و ساعت */
+        header {
             text-align: center;
-            color: var(--tg-theme-button-color, #3390ec);
+            margin-bottom: 30px;
         }
-        .clock-box {
-            text-align: center;
-            font-size: 1.2em;
-            margin-bottom: 20px;
-            padding: 10px;
-            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            border-radius: 10px;
+
+        .clock-card {
+            background: linear-gradient(135deg, #3390ec, #0078d7);
+            color: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 8px 20px rgba(51, 144, 236, 0.3);
+            margin-bottom: 25px;
         }
-        .card {
-            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            position: relative;
+
+        .clock-time {
+            font-size: 2.5em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            font-variant-numeric: tabular-nums;
         }
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
+
+        .clock-date {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-top: 5px;
         }
-        .title {
-            font-weight: bold;
+
+        h3 {
             font-size: 1.1em;
+            opacity: 0.6;
+            margin: 20px 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8rem;
         }
-        .date {
-            font-size: 0.9em;
-            color: var(--tg-theme-hint-color, #999);
+
+        /* کارت‌ها */
+        .card {
+            background: var(--tg-theme-bg-color, var(--card-bg));
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: transform 0.2s;
         }
-        .countdown {
+
+        .card:active {
+            transform: scale(0.98);
+        }
+
+        .card-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px; /* LTR Default */
+        }
+        
+        body.rtl .card-icon {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+        .card-info {
+            flex-grow: 1;
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .card-date {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .card-badge {
+            background: rgba(51, 144, 236, 0.1);
+            color: var(--accent-color);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
             font-weight: bold;
-            color: var(--tg-theme-button-color, #3390ec);
-            direction: ltr; /* اعداد انگلیسی باشند */
-            text-align: left;
+            white-space: nowrap;
         }
-        .quote-box {
-            margin-top: 30px;
-            font-style: italic;
+        
+        .card-badge.urgent {
+            background: rgba(229, 57, 53, 0.1);
+            color: var(--danger-color);
+        }
+
+        .empty-state {
             text-align: center;
-            opacity: 0.8;
+            opacity: 0.5;
+            padding: 40px 0;
             font-size: 0.9em;
         }
+        
+        .quote-section {
+            margin-top: 30px;
+            text-align: center;
+            font-style: italic;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            padding: 20px;
+            background: rgba(0,0,0,0.02);
+            border-radius: 15px;
+        }
+
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>مدیریت زمان هوشمند</h2>
     
-    <div class="clock-box" id="clock">
-        در حال بارگذاری ساعت...
+    <div class="clock-card">
+        <div class="clock-time" id="clock">00:00:00</div>
+        <div class="clock-date" id="date-display">Loading...</div>
     </div>
 
-    <div id="events-list">
-        <div style="text-align: center; margin-top: 20px;">در حال دریافت اطلاعات...</div>
-    </div>
+    <div id="content"></div>
 
-    <div class="quote-box" id="quote">
-        ...
-    </div>
+    <div class="quote-section" id="quote-box"></div>
+
 </div>
 
 <script>
+    // دریافت داده‌ها از پایتون
     const tg = window.Telegram.WebApp;
-    tg.expand(); // تمام صفحه شدن
+    tg.expand();
 
-    // دریافت اطلاعات از پایتون (که در HTML تزریق شده)
-    // در واقع پایتون متغیرها را جایگزین این بخش‌ها می‌کند
+    // این مقادیر توسط Flask پر می‌شوند
     const userData = {{ user_data | tojson }};
-    const userLang = "{{ lang }}";
+    const lang = "{{ lang }}"; // 'fa', 'de', 'en'
+    
+    // تنظیمات زبان (دیکشنری کلمات)
+    const i18n = {
+        fa: {
+            dir: 'rtl',
+            header_personal: '📌 شخصی',
+            header_official: '🚧 اداری و رسمی',
+            header_events: '🎉 مناسبت‌ها',
+            empty: 'هنوز رویدادی ثبت نکرده‌اید.',
+            days: 'روز',
+            today: 'امروز!',
+            passed: 'گذشته',
+            locale: 'fa-IR'
+        },
+        de: {
+            dir: 'ltr',
+            header_personal: '📌 Persönlich',
+            header_official: '🚧 Behörden & Amtlich',
+            header_events: '🎉 Ereignisse',
+            empty: 'Keine Einträge vorhanden.',
+            days: 'Tage',
+            today: 'Heute!',
+            passed: 'Vorbei',
+            locale: 'de-DE'
+        },
+        en: {
+            dir: 'ltr',
+            header_personal: '📌 Personal',
+            header_official: '🚧 Official',
+            header_events: '🎉 Events',
+            empty: 'No events found.',
+            days: 'days',
+            today: 'Today!',
+            passed: 'Passed',
+            locale: 'en-US'
+        }
+    };
 
-    // تنظیم ساعت
+    const t = i18n[lang] || i18n.en;
+
+    // اعمال جهت متن (راست چین / چپ چین)
+    if (t.dir === 'rtl') {
+        document.body.classList.add('rtl');
+    }
+
+    // --- ساعت زنده ---
     function updateClock() {
         const now = new Date();
-        const timeString = now.toLocaleTimeString(userLang === 'de' ? 'de-DE' : 'fa-IR');
-        document.getElementById('clock').innerText = (userLang === 'de' ? 'Uhrzeit: ' : 'ساعت: ') + timeString;
+        // ساعت
+        document.getElementById('clock').innerText = now.toLocaleTimeString(t.locale, {hour12: false});
+        // تاریخ
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('date-display').innerText = now.toLocaleDateString(t.locale, options);
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    // ساخت لیست رویدادها
-    const listDiv = document.getElementById('events-list');
-    listDiv.innerHTML = '';
+    // --- ساخت لیست کارت‌ها ---
+    const contentDiv = document.getElementById('content');
+    
+    // تفکیک رویدادها
+    const personal = [];
+    const official = [];
+    const events = [];
 
-    if (Object.keys(userData).length === 0) {
-        listDiv.innerHTML = '<p style="text-align:center">لیست خالی است / Liste ist leer</p>';
-    } else {
-        for (const [key, item] of Object.entries(userData)) {
-            const title = item.labels[userLang] || item.labels['en'];
-            const dateStr = item.date; // DD.MM.YYYY
-            
-            // محاسبه روز باقیمانده (ساده)
-            const parts = dateStr.split('.');
-            const targetDate = new Date(parts[2], parts[1]-1, parts[0]);
-            const now = new Date();
-            const diffTime = targetDate - now;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            let daysText = diffDays > 0 ? diffDays + (userLang === 'de' ? ' Tage' : ' روز') : (userLang === 'de' ? 'Heute!' : 'امروز!');
-            if (diffDays < 0) daysText = (userLang === 'de' ? 'Vorbei' : 'گذشته');
+    for (const [key, item] of Object.entries(userData)) {
+        // اگر رویداد حذف شده بود یا تایپ نداشت، شخصی در نظر بگیر
+        const type = item.type || 'personal';
+        const title = (item.labels && item.labels[lang]) ? item.labels[lang] : (item.de_label || "Event");
+        
+        const obj = { ...item, title: title, key: key };
 
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.innerHTML = `
-                <div class="card-header">
-                    <span class="title">${item.icon} ${title}</span>
-                </div>
-                <div class="date">📅 ${dateStr}</div>
-                <div class="countdown">⏳ ${daysText}</div>
-            `;
-            listDiv.appendChild(card);
-        }
+        if (type === 'official') official.push(obj);
+        else if (type === 'event') events.push(obj);
+        else personal.push(obj);
     }
 
-    // نمایش رنگ تم تلگرام
-    document.body.style.backgroundColor = tg.themeParams.bg_color;
+    function createSection(title, items) {
+        if (items.length === 0) return '';
+        
+        let html = `<h3>${title}</h3>`;
+        items.forEach(item => {
+            // محاسبه روز باقیمانده
+            const parts = item.date.split('.');
+            const target = new Date(parts[2], parts[1]-1, parts[0]);
+            const today = new Date();
+            const diffTime = target - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            let badgeText = '';
+            let badgeClass = 'card-badge';
+            
+            if (diffDays > 0) badgeText = `${diffDays} ${t.days}`;
+            else if (diffDays === 0) badgeText = t.today;
+            else {
+                badgeText = t.passed;
+                badgeClass += ' urgent';
+            }
+
+            // نمایش تاریخ (برای فارسی شاید بخواهید بعدا شمسی کنید، فعلا ساده)
+            const displayDate = item.date; 
+
+            html += `
+            <div class="card">
+                <div class="card-icon">${item.icon || '📅'}</div>
+                <div class="card-info">
+                    <div class="card-title">${item.title}</div>
+                    <div class="card-date">${displayDate}</div>
+                </div>
+                <div class="${badgeClass}">${badgeText}</div>
+            </div>
+            `;
+        });
+        return html;
+    }
+
+    let fullHtml = '';
+    if (Object.keys(userData).length === 0) {
+        fullHtml = `<div class="empty-state">${t.empty}</div>`;
+    } else {
+        fullHtml += createSection(t.header_official, official);
+        fullHtml += createSection(t.header_personal, personal);
+        fullHtml += createSection(t.header_events, events);
+    }
+
+    contentDiv.innerHTML = fullHtml;
+
+    // رنگ تم تلگرام
+    if (tg.themeParams.bg_color) {
+        document.body.style.backgroundColor = tg.themeParams.secondary_bg_color || '#f4f6f8';
+    }
+
 </script>
 
 </body>
