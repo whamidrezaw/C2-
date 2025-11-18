@@ -1,6 +1,6 @@
 python-telegram-bot
 flask
-pymongo
+pymongo[srv]
 certifi
 jdatetime
 pytz
