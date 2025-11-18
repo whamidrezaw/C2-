@@ -15,8 +15,12 @@ app = Flask(__name__, template_folder='templates')
 
 # --- CONFIGURATION ---
 BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
-GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM"
+GEMINI_API_KEY = "AIzaSyAMNyRzBnssfBI5wKK8rsQJAIWrE1V_XdM" 
+
+# Your MongoDB URI
 MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
+
+# Your Render URL (Ensure https)
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
 
 # Setup AI
@@ -27,31 +31,34 @@ model = genai.GenerativeModel('gemini-pro')
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- DATABASE SETUP ---
+# --- DATABASE CONNECTION ---
 try:
     client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = client['time_manager_db']
     users_collection = db['users']
-    logger.info("Connected to MongoDB")
+    logger.info("✅ Connected to MongoDB")
 except Exception as e:
-    logger.error(f"MongoDB Connection Failed: {e}")
+    logger.error(f"❌ MongoDB Error: {e}")
 
 # --- FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is running (Smart Numerals)"
+def home(): return "Bot is running (English Core)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
+    # Fetch user data for the Mini App
     data = get_user_data(user_id)
     targets = data.get('targets', {})
     
+    # Pre-calculate Numeric Jalali dates for display
     for key, item in targets.items():
         try:
             g_date = datetime.strptime(item['date'], "%d.%m.%Y")
             j_date = jdatetime.date.fromgregorian(date=g_date.date())
+            # Format: YYYY.MM.DD (Numeric)
             item['shamsi_date'] = j_date.strftime("%Y.%m.%d")
         except:
-            item['shamsi_date'] = "N/A"
+            item['shamsi_date'] = ""
 
     return render_template('index.html', user_data=targets)
 
@@ -71,113 +78,121 @@ def get_user_data(user_id):
 def update_user_data(user_id, data):
     users_collection.update_one({"_id": str(user_id)}, {"$set": data}, upsert=True)
 
-# --- SMART DATE PARSER (با پشتیبانی اعداد فارسی) ---
+# --- SMART DATE PARSER ---
 def parse_smart_date(date_str):
     """
     1. Converts Persian/Arabic digits to English.
-    2. Detects Gregorian or Jalali.
-    3. Returns Standard Gregorian DD.MM.YYYY
+    2. Detects Gregorian vs Jalali based on year.
+    3. Returns Standard Gregorian String (DD.MM.YYYY).
     """
-    # 1. تبدیل اعداد فارسی/عربی به انگلیسی
+    # Convert digits
     persian_nums = "۰۱۲۳۴۵۶۷۸۹"
     arabic_nums = "٠١٢٣٤٥٦٧٨٩"
     english_nums = "0123456789"
-    
     trans_table = str.maketrans(persian_nums + arabic_nums, english_nums * 2)
     date_str = date_str.translate(trans_table)
 
-    # 2. نرمال‌سازی جداکننده‌ها
+    # Normalize separators
     date_str = date_str.replace('/', '.').replace('-', '.')
     parts = date_str.split('.')
     
     if len(parts) != 3: return None, None
     
     try:
-        y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+        p1, p2, p3 = int(parts[0]), int(parts[1]), int(parts[2])
+        
+        # Determine which part is the Year (usually first or last)
+        if p1 > 1000: y, m, d = p1, p2, p3
+        elif p3 > 1000: y, m, d = p3, p2, p1
+        else: return None, None # Can't determine year
+
         final_date = None
         
-        # اگر سال > 1900 -> میلادی
+        # Logic: Year > 1900 = Gregorian, Year < 1500 = Jalali
         if y > 1900:
             final_date = datetime(y, m, d)
-        # اگر سال < 1500 -> شمسی (فرض بر جلالی)
         elif y < 1500:
             j_date = jdatetime.date(y, m, d).togregorian()
             final_date = datetime(j_date.year, j_date.month, j_date.day)
         else:
-            return None, None 
+            return None, None
 
-        return final_date, final_date.strftime("%d.%m.%Y")
-    except: return None, None
-
-# --- UI TEXTS ---
-UI = {
-    "en": { 
-        "welcome": "👋 **Welcome!**\nTime Management Bot.\nUse buttons below:",
-        "open_app": "📱 Open App", "add": "➕ Add Event", "del": "🗑 Delete", "mentor": "🧠 AI Mentor",
-        "ask_name": "📝 **Enter Event Name:**",
-        "ask_date": "📅 **Enter Date:**\n(Support Persian/English Digits)\nExamples:\n• `2026.12.30`\n• `۱۴۰۵/۱۰/۲۰`",
-        "saved": "✅ **Event Saved!**", "error": "❌ **Invalid Date!**\nTry again: `YYYY.MM.DD`", "cancel": "❌ Cancel",
-        "empty": "📭 List is empty.", "del_ask": "🗑 **Delete Item:**", "deleted": "✅ Deleted.",
-        "mentor_thinking": "🧠 **AI Analyzing...**"
-    }
-}
-def get_text(lang, key): return UI["en"][key]
+        return final_date.strftime("%d.%m.%Y")
+    except Exception as e:
+        logger.error(f"Date Parse Error: {e}")
+        return None, None
 
 # --- KEYBOARDS ---
 def get_main_kb(uid):
     url = f"{WEBAPP_URL_BASE}/webapp/{uid}"
     return ReplyKeyboardMarkup([
-        [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
+        [KeyboardButton("📱 Open Mini App", web_app=WebAppInfo(url=url))],
         [KeyboardButton("🧠 AI Mentor")],
-        [KeyboardButton("➕ Add Event"), KeyboardButton("🗑 Delete")]
+        [KeyboardButton("➕ Add Event"), KeyboardButton("🗑 Delete Event")]
     ], resize_keyboard=True)
 
-# --- HANDLERS ---
+# --- BOT HANDLERS ---
 GET_TITLE, GET_DATE = range(2)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    get_user_data(user.id)
-    await update.message.reply_text(get_text('en', "welcome"), reply_markup=get_main_kb(user.id), parse_mode='Markdown')
+    uid = update.effective_user.id
+    get_user_data(uid)
+    await update.message.reply_text(
+        "👋 **Welcome!**\nI am your Time Manager.\n\n"
+        "Use the buttons below to manage your events.",
+        reply_markup=get_main_kb(uid),
+        parse_mode='Markdown'
+    )
 
+# --- ADD FLOW ---
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_text('en', "ask_name"), reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
+    await update.message.reply_text(
+        "📝 **Enter Event Name:**", 
+        reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), 
+        parse_mode='Markdown'
+    )
     return 1
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message.text
-    if "❌" in msg: return await cancel(update, context)
+    if msg == "❌ Cancel": return await cancel(update, context)
+    
     context.user_data['title'] = msg
-    await update.message.reply_text(get_text('en', "ask_date"), parse_mode='Markdown')
+    await update.message.reply_text(
+        "📅 **Enter Date:**\n"
+        "You can type Gregorian (2026.12.01) or Shamsi (1405.09.10).\n"
+        "I support Persian/English numbers.",
+        parse_mode='Markdown'
+    )
     return 2
 
 async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message.text
     uid = update.effective_user.id
-    if "❌" in msg: return await cancel(update, context)
+    if msg == "❌ Cancel": return await cancel(update, context)
     
-    # Smart Parsing (Persian Digits Support)
-    dt_obj, formatted_date = parse_smart_date(msg)
+    formatted_date = parse_smart_date(msg)
     
-    if dt_obj:
+    if formatted_date:
         data = get_user_data(uid)
         new_id = f"evt_{int(datetime.now().timestamp())}"
         data['targets'][new_id] = {
-            "title": context.user_data['title'],
-            "date": formatted_date, # Always Gregorian English Digits
+            "title": context.user_data['title'], # Raw input, no translation
+            "date": formatted_date, # Always stored as DD.MM.YYYY (Gregorian)
             "type": "personal"
         }
         update_user_data(uid, data)
-        await update.message.reply_text(get_text('en', "saved"), reply_markup=get_main_kb(uid), parse_mode='Markdown')
+        await update.message.reply_text("✅ **Event Saved Successfully!**", reply_markup=get_main_kb(uid), parse_mode='Markdown')
         return ConversationHandler.END
     else:
-        await update.message.reply_text(get_text('en', "error"), parse_mode='Markdown')
+        await update.message.reply_text("❌ **Invalid Date!**\nPlease try again (e.g., 2025.12.01 or 1404.09.10)", parse_mode='Markdown')
         return 2
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_text('en', "cancel"), reply_markup=get_main_kb(update.effective_user.id))
+    await update.message.reply_text("❌ Canceled.", reply_markup=get_main_kb(update.effective_user.id))
     return ConversationHandler.END
 
+# --- DELETE FLOW ---
 async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     data = get_user_data(uid)
@@ -185,8 +200,8 @@ async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     kb = []
     for k, v in data['targets'].items():
-        kb.append([InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"del_{k}")])
-    await update.message.reply_text("🗑 **Delete Item:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
+        kb.append([InlineKeyboardButton(f"❌ {v['title']} ({v['date']})", callback_data=f"del_{k}")])
+    await update.message.reply_text("🗑 **Select item to delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
 
 async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -197,24 +212,27 @@ async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if key in data['targets']:
         del data['targets'][key]
         update_user_data(uid, data)
-        await query.answer("Deleted")
+        await query.answer("Deleted!")
         await query.delete_message()
-    else: await query.answer("Not found")
+    else: await query.answer("Item not found")
 
+# --- AI MENTOR ---
 async def mentor_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     data = get_user_data(uid)
-    if not data['targets']: return await update.message.reply_text("📭 List is empty.")
+    if not data['targets']: return await update.message.reply_text("📭 Add events first!")
     
-    await update.message.reply_text("🧠 **AI Analyzing...**", parse_mode='Markdown')
+    await update.message.reply_text("🧠 **AI is analyzing your schedule...**", parse_mode='Markdown')
     
     events_txt = "\n".join([f"- {v['title']}: {v['date']}" for v in data['targets'].values()])
-    prompt = f"Analyze these deadlines and give short advice in English:\n{events_txt}"
+    prompt = f"You are a strict time management mentor. Analyze these deadlines and give short, actionable advice in English:\n{events_txt}"
     
     try:
         response = model.generate_content(prompt)
         await update.message.reply_text(response.text, parse_mode='Markdown')
-    except: await update.message.reply_text("⚠️ AI Error")
+    except Exception as e:
+        logger.error(f"AI Error: {e}")
+        await update.message.reply_text("⚠️ AI is currently unavailable.")
 
 def main():
     keep_alive()
@@ -225,13 +243,14 @@ def main():
         states={1: [MessageHandler(filters.TEXT, receive_title)], 2: [MessageHandler(filters.TEXT, receive_date)]},
         fallbacks=[MessageHandler(filters.ALL, cancel)]
     )
+    
     app.add_handler(conv)
     app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_trigger))
     app.add_handler(MessageHandler(filters.Regex("^(🧠|AI)"), mentor_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
     
-    print("Bot Running (Smart Persian Input)...")
+    print("Bot Started (English Final)...")
     app.run_polling()
 
 if __name__ == "__main__":

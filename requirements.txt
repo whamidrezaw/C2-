@@ -1,9 +1,7 @@
-python-telegram-bot[job-queue]
-python-dateutil
+python-telegram-bot
 flask
+pymongo
+certifi
 jdatetime
 pytz
 google-generativeai
-pymongo
-certifi
-hijri-converter

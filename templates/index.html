@@ -13,6 +13,7 @@
             --text-secondary: #777777;
             --accent-color: #3390ec;
             --danger-color: #e53935;
+            --success-color: #2ecc71;
             --radius: 16px;
         }
         body {
@@ -29,7 +30,7 @@
             box-shadow: 0 8px 20px rgba(51, 144, 236, 0.3);
             margin-bottom: 25px; text-align: center;
         }
-        .clock-time { font-size: 2.5em; font-weight: 700; letter-spacing: 1px; }
+        .clock-time { font-size: 2.5em; font-weight: 700; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
         .clock-date { font-size: 0.9em; opacity: 0.9; margin-top: 5px; }
         
         .card {
@@ -41,17 +42,19 @@
         .card-info { flex-grow: 1; margin-left: 15px; }
         .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
         
-        .card-date-group { display: flex; flex-direction: column; font-size: 0.85rem; gap: 2px; }
+        .card-date-group { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
         .date-row { display: flex; align-items: center; gap: 6px; }
-        .date-label { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; width: 60px; }
-        .date-val { font-weight: 500; font-family: monospace; font-size: 0.9rem; color: var(--text-primary); }
+        .date-label { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; width: 40px; }
+        .date-val { font-weight: 500; font-family: monospace; font-size: 0.95rem; color: var(--text-primary); }
 
         .card-badge {
             background: rgba(51, 144, 236, 0.1); color: var(--accent-color);
-            padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: bold;
-            min-width: 60px; text-align: center;
+            padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: bold;
+            min-width: 65px; text-align: center;
         }
         .card-badge.urgent { background: rgba(229, 57, 53, 0.1); color: var(--danger-color); }
+        .card-badge.passed { background: rgba(0, 0, 0, 0.1); color: #666; }
+        
         .empty-state { text-align: center; opacity: 0.5; padding: 40px 0; }
     </style>
 </head>
@@ -66,12 +69,14 @@
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+    
+    // Flask injects data here. Ignore IDE errors about syntax.
     const userData = {{ user_data | tojson }};
 
     function updateClock() {
         const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString('en-US', {hour12: false});
-        document.getElementById('date-display').innerText = now.toLocaleDateString('en-US', {weekday:'short', year:'numeric', month:'short', day:'numeric'});
+        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour12: false});
+        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -81,18 +86,32 @@
     
     if(Object.keys(userData).length === 0) html = `<div class="empty-state">List is empty.</div>`;
     else {
-        Object.entries(userData).forEach(([key, item]) => {
-            // Parse Gregorian Date
+        // Sort by date
+        const sortedKeys = Object.keys(userData).sort((a, b) => {
+            const dateA = userData[a].date.split('.').reverse().join('');
+            const dateB = userData[b].date.split('.').reverse().join('');
+            return dateA.localeCompare(dateB);
+        });
+
+        sortedKeys.forEach((key) => {
+            const item = userData[key];
+            // Parse Gregorian Date for countdown
             const parts = item.date.split('.');
             const target = new Date(parts[2], parts[1]-1, parts[0]);
-            const diff = Math.ceil((target - new Date()) / (86400000));
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const diff = Math.ceil((target - today) / (86400000));
             
-            let badge = diff > 0 ? `${diff} Days` : (diff === 0 ? "Today" : "Passed");
-            let cls = diff < 0 ? 'card-badge urgent' : 'card-badge';
+            let badgeText = `${diff} Days`;
+            let cls = 'card-badge';
             
-            // تاریخ شمسی عددی (از پایتون می‌آید: YYYY.MM.DD)
-            let shamsiDisplay = item.shamsi_date ? 
-                `<div class="date-row"><span class="date-label">Jalali:</span><span class="date-val">${item.shamsi_date}</span></div>` : '';
+            if (diff === 0) { badgeText = "Today"; cls += ' urgent'; }
+            else if (diff < 0) { badgeText = "Passed"; cls += ' passed'; }
+            else if (diff < 30) { cls += ' urgent'; }
+
+            // Numeric Jalali from Server
+            let jalaliHtml = item.shamsi_date ? 
+                `<div class="date-row"><span class="date-label">IR:</span><span class="date-val">${item.shamsi_date}</span></div>` : '';
 
             html += `
             <div class="card">
@@ -101,19 +120,24 @@
                     <div class="card-title">${item.title}</div>
                     <div class="card-date-group">
                         <div class="date-row">
-                            <span class="date-label">Gregorian:</span>
+                            <span class="date-label">EN:</span>
                             <span class="date-val">${item.date}</span>
                         </div>
-                        ${shamsiDisplay}
+                        ${jalaliHtml}
                     </div>
                 </div>
-                <div class="${cls}">${badge}</div>
+                <div class="${cls}">${badgeText}</div>
             </div>`;
         });
     }
     contentDiv.innerHTML = html;
 
-    if (tg.themeParams.bg_color) document.body.style.backgroundColor = tg.themeParams.secondary_bg_color || '#f4f6f8';
+    // Apply Telegram Theme
+    if (tg.themeParams.bg_color) {
+        document.body.style.backgroundColor = tg.themeParams.secondary_bg_color || '#f4f6f8';
+        document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
+        document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
+    }
 </script>
 </body>
 </html>
