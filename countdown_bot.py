@@ -6,6 +6,7 @@ import re
 import hmac
 import hashlib
 import time
+import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, abort, Response
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
@@ -15,35 +16,38 @@ import certifi
 import jdatetime
 import ssl
 
-app = Flask(__name__, template_folder='templates', static_folder='static')
+app = Flask(__name__, template_folder='templates')
 
 # --- CONFIGURATION ---
+# مقادیر خود را جایگزین کنید
 BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
-MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0"
+MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0&retryWrites=true&w=majority"
 WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
-ADMIN_ID = 1081294386 
+ADMIN_ID = 1081294386
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- DATABASE ---
+# --- DATABASE CONNECTION (Robust) ---
 users_collection = None
 try:
     ca = certifi.where()
+    # اضافه کردن retryWrites برای پایداری بیشتر
     client = MongoClient(MONGO_URI, tls=True, tlsCAFile=ca, serverSelectionTimeoutMS=5000)
     client.admin.command('ping')
     db = client['time_manager_db']
     users_collection = db['users']
-    logger.info("✅ MONGODB CONNECTED")
+    logger.info("✅ MONGODB CONNECTED SECURELY")
 except Exception as e:
     logger.error(f"❌ DB ERROR: {e}")
 
-# --- SECURITY UTILS ---
+# --- SECURITY UTILS (Phase 1 Fixes) ---
 def generate_secure_url(user_id):
     """Generates URL with Timestamp + Signature (Valid for 5 mins)"""
     if not BOT_TOKEN: return None
     timestamp = int(time.time())
+    # امضا شامل آیدی کاربر و زمان است
     payload = f"{user_id}:{timestamp}"
     signature = hmac.new(BOT_TOKEN.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{WEBAPP_URL_BASE}/webapp/{user_id}?ts={timestamp}&sig={signature}"
@@ -53,21 +57,23 @@ def verify_request(user_id, ts, sig):
     if not BOT_TOKEN or not ts or not sig: return False
     
     # 1. Check Expiry (5 minutes = 300 seconds)
-    if int(time.time()) - int(ts) > 300:
-        return False # Expired
+    try:
+        if int(time.time()) - int(ts) > 300:
+            return False # Expired
+    except: return False
         
     # 2. Check Signature
     payload = f"{user_id}:{ts}"
     expected = hmac.new(BOT_TOKEN.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sig)
 
-# --- FLASK ---
+# --- FLASK HANDLERS ---
 @app.after_request
 def add_security_headers(response):
-    # Content Security Policy (CSP) - Phase 1 Goal
+    # افزودن CSP طبق گزارش امنیتی
     csp = (
         "default-src 'self' https://telegram.org; "
-        "script-src 'self' https://telegram.org 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline' https://telegram.org; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com;"
     )
@@ -75,7 +81,7 @@ def add_security_headers(response):
     return response
 
 @app.route('/')
-def home(): return "Bot is Running (Phase 1 Security)"
+def home(): return "Bot is Running (Security Patch v1)"
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
@@ -84,7 +90,7 @@ def webapp(user_id):
     sig = request.args.get('sig')
     
     if not verify_request(user_id, ts, sig):
-        return "⛔ Link Expired or Invalid. Please request a new one from the bot.", 403
+        return "⛔ Link Expired or Invalid. Please open from Telegram again.", 403
 
     data = get_user_data(user_id)
     targets = data.get('targets', {})
@@ -102,7 +108,7 @@ def webapp(user_id):
 def run_server(): app.run(host='0.0.0.0', port=10000)
 def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
 
-# --- DATA HELPERS ---
+# --- DATA HELPERS (Atomic) ---
 def get_user_data(uid):
     if users_collection is None: return {"_id": str(uid), "targets": {}}
     try:
@@ -113,17 +119,34 @@ def get_user_data(uid):
         return data
     except: return {"_id": str(uid), "targets": {}}
 
-def update_db(uid, data):
+def add_event_db(uid, event_data):
+    """Renamed from add_event_to_db to fix NameError"""
+    if users_collection is None: return False
+    # UUID امن برای جلوگیری از تداخل
+    event_id = f"evt_{uuid.uuid4().hex[:8]}" 
+    try:
+        users_collection.update_one(
+            {"_id": str(uid)},
+            {"$set": {f"targets.{event_id}": event_data}},
+            upsert=True
+        )
+        return True
+    except: return False
+
+def delete_event_db(uid, event_id):
     if users_collection is None: return False
     try:
-        users_collection.update_one({"_id": str(uid)}, {"$set": data}, upsert=True)
+        users_collection.update_one(
+            {"_id": str(uid)},
+            {"$unset": {f"targets.{event_id}": ""}}
+        )
         return True
     except: return False
 
 # --- LOGIC ---
 def parse_smart_date(date_str):
     date_str = str(date_str).strip()
-    if len(date_str) > 20: return None # Basic Validation
+    if len(date_str) > 20: return None # Anti-Spam Validation
     
     trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
     date_str = date_str.translate(trans)
@@ -149,7 +172,7 @@ def parse_smart_date(date_str):
 
 # --- KEYBOARDS ---
 def main_kb(uid):
-    url = generate_secure_url(uid)
+    url = generate_secure_url(uid) # لینک امن
     if not url: return None
     return ReplyKeyboardMarkup([
         [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
@@ -176,9 +199,8 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "❌ Cancel": return await cancel(update, context)
-    # Validation: Length
-    if len(update.message.text) > 50:
-        await update.message.reply_text("⚠️ Name too long. Try again.")
+    if len(update.message.text) > 50: # Validation
+        await update.message.reply_text("⚠️ Too long. Try again.")
         return 1
     context.user_data['title'] = update.message.text
     await update.message.reply_text("📅 **Date:**\n(e.g. 2026.12.30)", parse_mode='Markdown')
@@ -190,22 +212,17 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     formatted = parse_smart_date(update.message.text)
     
     if formatted:
-        data = get_user_data(uid)
-        import uuid
-        new_id = f"evt_{uuid.uuid4().hex[:8]}" # Better ID generation
-        
-        # Atomic Update Logic
         event_data = {
             "title": context.user_data['title'],
             "date": formatted,
             "type": "personal"
         }
         
-        if users_collection:
-             users_collection.update_one({"_id": str(uid)}, {"$set": {f"targets.{new_id}": event_data}}, upsert=True)
-             await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
+        # استفاده از تابع اصلاح شده
+        if add_event_db(uid, event_data):
+            await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
         else:
-             await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
+            await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
         return ConversationHandler.END
     else:
         await update.message.reply_text("❌ **Invalid Date!**", parse_mode='Markdown')
@@ -245,8 +262,7 @@ async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     key = query.data.replace("del_", "")
     
-    if users_collection:
-        users_collection.update_one({"_id": str(uid)}, {"$unset": {f"targets.{key}": ""}})
+    if delete_event_db(uid, key):
         await query.answer("Deleted")
         await query.delete_message()
     else: await query.answer("Error")
@@ -273,7 +289,7 @@ def main():
     app.add_handler(CallbackQueryHandler(delete_cb))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), unknown_msg))
     
-    print("Bot Running (Phase 1 Security)...")
+    print("Bot Running (Security Patch Applied)...")
     app.run_polling()
 
 if __name__ == "__main__":
