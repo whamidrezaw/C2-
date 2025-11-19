@@ -61,6 +61,7 @@ def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
 
 # --- DATA HELPERS ---
 def get_user_data(uid):
+    # FIX: Explicit check against None
     if users_collection is None: return {"_id": str(uid), "targets": {}}
     try:
         data = users_collection.find_one({"_id": str(uid)})
@@ -71,6 +72,7 @@ def get_user_data(uid):
     except: return {"_id": str(uid), "targets": {}}
 
 def update_db(uid, data):
+    # FIX: Explicit check against None
     if users_collection is None: return False
     try:
         users_collection.update_one({"_id": str(uid)}, {"$set": data}, upsert=True)
