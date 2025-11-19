@@ -3,14 +3,22 @@ import threading
 import json
 import os
 import re
-import hmac
-import hashlib
 import time
-import uuid
 from datetime import datetime
-from flask import Flask, render_template, request, abort, Response
+from flask import Flask, render_template, request, abort
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+    Defaults
+)
 from pymongo import MongoClient
 import certifi
 import jdatetime
@@ -18,136 +26,119 @@ import ssl
 
 app = Flask(__name__, template_folder='templates')
 
-# --- CONFIGURATION ---
-# مقادیر خود را جایگزین کنید
-BOT_TOKEN = "8527713338:AAEhR5T_JISPJqnecfEobu6hELJ6a9RAQrU"
-MONGO_URI = "mongodb+srv://soltanshahhamidreza_db_user:oImlEg2Md081ASoY@cluster0.qcuz3fw.mongodb.net/?appName=Cluster0&retryWrites=true&w=majority"
-WEBAPP_URL_BASE = "https://my-bot-new.onrender.com"
-ADMIN_ID = 1081294386
+# --- 1. SECURITY & CONFIGURATION ---
+# Load secrets from Environment Variables ONLY
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+MONGO_URI = os.getenv("MONGO_URI")
+WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")
 
-# Logging
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", 0)) # Default to 0 if missing
+except:
+    ADMIN_ID = None
 
-# --- DATABASE CONNECTION (Robust) ---
+# Fail Fast: If critical secrets are missing, stop immediately.
+if not BOT_TOKEN or not MONGO_URI:
+    print("❌ CRITICAL ERROR: BOT_TOKEN or MONGO_URI is missing from Environment Variables.")
+    exit(1)
+
+# Logging Setup
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    level=logging.INFO
+)
+logger = logging.getLogger("TimeManagerBot")
+
+# --- 2. DATABASE CONNECTION ---
 users_collection = None
 try:
     ca = certifi.where()
-    # اضافه کردن retryWrites برای پایداری بیشتر
-    client = MongoClient(MONGO_URI, tls=True, tlsCAFile=ca, serverSelectionTimeoutMS=5000)
+    client = MongoClient(
+        MONGO_URI, 
+        tls=True, 
+        tlsCAFile=ca, 
+        serverSelectionTimeoutMS=5000,
+        retryWrites=True
+    )
     client.admin.command('ping')
     db = client['time_manager_db']
     users_collection = db['users']
-    logger.info("✅ MONGODB CONNECTED SECURELY")
+    logger.info("✅ MongoDB Connected Securely")
 except Exception as e:
-    logger.error(f"❌ DB ERROR: {e}")
+    logger.critical(f"❌ DB Connection Failed: {e}")
+    exit(1) # Cannot run without DB
 
-# --- SECURITY UTILS (Phase 1 Fixes) ---
-def generate_secure_url(user_id):
-    """Generates URL with Timestamp + Signature (Valid for 5 mins)"""
-    if not BOT_TOKEN: return None
-    timestamp = int(time.time())
-    # امضا شامل آیدی کاربر و زمان است
-    payload = f"{user_id}:{timestamp}"
-    signature = hmac.new(BOT_TOKEN.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{WEBAPP_URL_BASE}/webapp/{user_id}?ts={timestamp}&sig={signature}"
+# --- 3. RATE LIMITING (Simple In-Memory) ---
+user_timestamps = {}
 
-def verify_request(user_id, ts, sig):
-    """Validates Signature & Expiry"""
-    if not BOT_TOKEN or not ts or not sig: return False
-    
-    # 1. Check Expiry (5 minutes = 300 seconds)
-    try:
-        if int(time.time()) - int(ts) > 300:
-            return False # Expired
-    except: return False
-        
-    # 2. Check Signature
-    payload = f"{user_id}:{ts}"
-    expected = hmac.new(BOT_TOKEN.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, sig)
+def check_rate_limit(user_id):
+    """Simple rate limit: 1 request per second per user"""
+    now = time.time()
+    last_time = user_timestamps.get(user_id, 0)
+    if now - last_time < 1.0: # 1 second limit
+        return False
+    user_timestamps[user_id] = now
+    return True
 
-# --- FLASK HANDLERS ---
-@app.after_request
-def add_security_headers(response):
-    # افزودن CSP طبق گزارش امنیتی
-    csp = (
-        "default-src 'self' https://telegram.org; "
-        "script-src 'self' 'unsafe-inline' https://telegram.org; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com;"
-    )
-    response.headers['Content-Security-Policy'] = csp
-    return response
-
+# --- 4. FLASK SERVER ---
 @app.route('/')
-def home(): return "Bot is Running (Security Patch v1)"
+def home(): return "Status: Online 🟢"
+
+@app.route('/healthz')
+def health():
+    """Health check endpoint for UptimeRobot"""
+    try:
+        client.admin.command('ping')
+        return "OK", 200
+    except:
+        return "DB Fail", 500
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
-    # Security Check
-    ts = request.args.get('ts')
-    sig = request.args.get('sig')
-    
-    if not verify_request(user_id, ts, sig):
-        return "⛔ Link Expired or Invalid. Please open from Telegram again.", 403
-
     data = get_user_data(user_id)
     targets = data.get('targets', {})
     
-    # Prepare Data
+    # Display logic for dates
     for key, item in targets.items():
         try:
             g_date = datetime.strptime(item['date'], "%d.%m.%Y")
             j_date = jdatetime.date.fromgregorian(date=g_date.date())
             item['shamsi_date'] = j_date.strftime("%Y.%m.%d")
         except: item['shamsi_date'] = ""
-            
+
     return render_template('index.html', user_data=targets)
 
-def run_server(): app.run(host='0.0.0.0', port=10000)
-def keep_alive(): threading.Thread(target=run_server, daemon=True).start()
+def run_server():
+    # In production, use Gunicorn. For this setup, threading is acceptable for low traffic.
+    app.run(host='0.0.0.0', port=10000)
 
-# --- DATA HELPERS (Atomic) ---
+def keep_alive():
+    t = threading.Thread(target=run_server, daemon=True)
+    t.start()
+
+# --- 5. DATA HELPERS (Atomic) ---
 def get_user_data(uid):
-    if users_collection is None: return {"_id": str(uid), "targets": {}}
     try:
         data = users_collection.find_one({"_id": str(uid)})
         if not data:
-            users_collection.insert_one({"_id": str(uid), "targets": {}})
+            users_collection.insert_one({"_id": str(uid), "targets": {}, "joined_at": datetime.utcnow()})
             return {"_id": str(uid), "targets": {}}
         return data
-    except: return {"_id": str(uid), "targets": {}}
+    except Exception as e:
+        logger.error(f"DB Read Error: {e}")
+        return {"_id": str(uid), "targets": {}}
 
-def add_event_db(uid, event_data):
-    """Renamed from add_event_to_db to fix NameError"""
-    if users_collection is None: return False
-    # UUID امن برای جلوگیری از تداخل
-    event_id = f"evt_{uuid.uuid4().hex[:8]}" 
+def update_db(uid, data):
     try:
-        users_collection.update_one(
-            {"_id": str(uid)},
-            {"$set": {f"targets.{event_id}": event_data}},
-            upsert=True
-        )
+        users_collection.update_one({"_id": str(uid)}, {"$set": data}, upsert=True)
         return True
-    except: return False
+    except Exception as e:
+        logger.error(f"DB Write Error: {e}")
+        return False
 
-def delete_event_db(uid, event_id):
-    if users_collection is None: return False
-    try:
-        users_collection.update_one(
-            {"_id": str(uid)},
-            {"$unset": {f"targets.{event_id}": ""}}
-        )
-        return True
-    except: return False
-
-# --- LOGIC ---
+# --- 6. LOGIC & PARSING ---
 def parse_smart_date(date_str):
-    date_str = str(date_str).strip()
-    if len(date_str) > 20: return None # Anti-Spam Validation
-    
+    date_str = str(date_str).strip()[:20] # Limit input length
     trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
     date_str = date_str.translate(trans)
     date_str = re.sub(r'[/\-\s,]+', '.', date_str)
@@ -161,6 +152,7 @@ def parse_smart_date(date_str):
         elif p3 > 1000: y, m, d = p3, p2, p1
         else: return None
 
+        final = None
         if y > 1900: final = datetime(y, m, d)
         elif y < 1500: 
             j = jdatetime.date(y, m, d).togregorian()
@@ -170,107 +162,155 @@ def parse_smart_date(date_str):
     except: return None
     return None
 
-# --- KEYBOARDS ---
+# --- 7. TELEGRAM HANDLERS ---
+GET_TITLE, GET_DATE = range(2)
+GET_SUPPORT = 10
+
 def main_kb(uid):
-    url = generate_secure_url(uid) # لینک امن
-    if not url: return None
+    if WEBAPP_URL_BASE:
+        url = f"{WEBAPP_URL_BASE}/webapp/{uid}"
+        btn = KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))
+    else: btn = KeyboardButton("⚠️ WebApp Error")
+    
     return ReplyKeyboardMarkup([
-        [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
+        [btn],
         [KeyboardButton("➕ Add Event"), KeyboardButton("🗑 Delete Event")],
         [KeyboardButton("📞 Support")]
     ], resize_keyboard=True, is_persistent=True)
 
-# --- HANDLERS ---
-GET_TITLE, GET_DATE = range(2)
-GET_SUPPORT = 10
+# -- Global Error Handler --
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
+# -- Handlers --
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    get_user_data(uid)
-    await update.message.reply_text("👋 **Welcome!**", reply_markup=main_kb(uid), parse_mode='Markdown')
+    user = update.effective_user
+    if not check_rate_limit(user.id): return # Anti-Spam
+    
+    get_user_data(user.id)
+    await update.message.reply_text(
+        f"👋 **Hello {user.first_name}!**\n\n"
+        "I help you track deadlines securely.\n"
+        "👇 **Select an option:**",
+        reply_markup=main_kb(user.id), parse_mode=ParseMode.MARKDOWN
+    )
 
-async def unknown_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    await update.message.reply_text("❓ Use buttons:", reply_markup=main_kb(uid))
+async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_rate_limit(update.effective_user.id): return
+    await update.message.reply_text("❓ Please use the buttons below:", reply_markup=main_kb(update.effective_user.id))
 
+async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⛔ **Text only please.**", reply_markup=main_kb(update.effective_user.id))
+
+# -- Add Flow --
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 **Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
+    if not check_rate_limit(update.effective_user.id): return
+    await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode=ParseMode.MARKDOWN)
     return 1
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "❌ Cancel": return await cancel(update, context)
-    if len(update.message.text) > 50: # Validation
-        await update.message.reply_text("⚠️ Too long. Try again.")
+    msg = update.message.text
+    if msg == "❌ Cancel": return await cancel(update, context)
+    
+    if len(msg) > 50: # Validation
+        await update.message.reply_text("⚠️ Name too long (Max 50 chars).")
         return 1
-    context.user_data['title'] = update.message.text
-    await update.message.reply_text("📅 **Date:**\n(e.g. 2026.12.30)", parse_mode='Markdown')
+        
+    context.user_data['title'] = msg
+    await update.message.reply_text("📅 **Enter Date:**\n(e.g. 2026.12.30 or 1405.10.20)", parse_mode=ParseMode.MARKDOWN)
     return 2
 
 async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "❌ Cancel": return await cancel(update, context)
+    msg = update.message.text
     uid = update.effective_user.id
-    formatted = parse_smart_date(update.message.text)
+    if msg == "❌ Cancel": return await cancel(update, context)
     
+    formatted = parse_smart_date(msg)
     if formatted:
-        event_data = {
-            "title": context.user_data['title'],
-            "date": formatted,
-            "type": "personal"
-        }
+        data = get_user_data(uid)
+        import uuid
+        new_id = f"evt_{uuid.uuid4().hex[:8]}"
         
-        # استفاده از تابع اصلاح شده
-        if add_event_db(uid, event_data):
-            await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
-        else:
-            await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
+        # Atomic update using dot notation for specific field
+        try:
+            users_collection.update_one(
+                {"_id": str(uid)},
+                {"$set": {f"targets.{new_id}": {
+                    "title": context.user_data['title'],
+                    "date": formatted,
+                    "type": "personal"
+                }}},
+                upsert=True
+            )
+            await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logger.error(f"DB Error: {e}")
+            await update.message.reply_text("⛔ Database Error.", reply_markup=main_kb(uid))
+            
         return ConversationHandler.END
     else:
-        await update.message.reply_text("❌ **Invalid Date!**", parse_mode='Markdown')
+        await update.message.reply_text("❌ **Invalid Date!** Try again.", parse_mode=ParseMode.MARKDOWN)
         return 2
 
+# -- Support --
 async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💌 **Msg to Admin:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
+    if not check_rate_limit(update.effective_user.id): return
+    await update.message.reply_text("💌 **Write message for Admin:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode=ParseMode.MARKDOWN)
     return GET_SUPPORT
 
 async def support_rec(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "❌ Cancel": return await cancel(update, context)
+    msg = update.message.text
     user = update.effective_user
-    try:
-        if ADMIN_ID:
-            txt = f"📩 **Support**\nFrom: `{user.id}`\n\n{update.message.text[:1000]}"
-            await context.bot.send_message(chat_id=ADMIN_ID, text=txt, parse_mode='Markdown')
-            await update.message.reply_text("✅ Sent!", reply_markup=main_kb(user.id))
-    except: pass
+    if msg == "❌ Cancel": return await cancel(update, context)
+    
+    if ADMIN_ID:
+        try:
+            text = f"📩 **Support**\nFrom: `{user.id}`\n\n{msg[:1000]}" # Limit length
+            await context.bot.send_message(chat_id=ADMIN_ID, text=text, parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("✅ **Sent!**", reply_markup=main_kb(user.id), parse_mode=ParseMode.MARKDOWN)
+        except:
+            await update.message.reply_text("❌ Failed to send.", reply_markup=main_kb(user.id))
+    else:
+        await update.message.reply_text("⚠️ Support disabled.", reply_markup=main_kb(user.id))
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Canceled.", reply_markup=main_kb(update.effective_user.id))
     return ConversationHandler.END
 
+# -- Delete --
 async def delete_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_rate_limit(update.effective_user.id): return
     uid = update.effective_user.id
     data = get_user_data(uid)
     targets = data.get('targets', {})
-    if not targets: return await update.message.reply_text("📭 Empty.")
+    if not targets: return await update.message.reply_text("📭 **Empty.**", parse_mode=ParseMode.MARKDOWN)
+    
     kb = []
     for k, v in targets.items():
         kb.append([InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"del_{k}")])
-    await update.message.reply_text("🗑 **Delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
+    await update.message.reply_text("🗑 **Tap to delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = update.effective_user.id
     key = query.data.replace("del_", "")
     
-    if delete_event_db(uid, key):
-        await query.answer("Deleted")
+    try:
+        # Atomic delete
+        users_collection.update_one({"_id": str(uid)}, {"$unset": {f"targets.{key}": ""}})
+        await query.answer("Deleted!")
         await query.delete_message()
-    else: await query.answer("Error")
+    except:
+        await query.answer("Error")
 
 def main():
     keep_alive()
-    app = Application.builder().token(BOT_TOKEN).build()
+    defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
+    app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
     
+    app.add_error_handler(error_handler)
+
     conv_add = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(➕|Add)"), add_start)],
         states={1: [MessageHandler(filters.TEXT, receive_title)], 2: [MessageHandler(filters.TEXT, receive_date)]},
@@ -287,9 +327,12 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_trigger))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(delete_cb))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), unknown_msg))
     
-    print("Bot Running (Security Patch Applied)...")
+    # Security Filters
+    app.add_handler(MessageHandler(filters.ATTACHMENT, handle_files))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), unknown_message))
+    
+    print(f"Bot Running Securely (Admin: {ADMIN_ID})...")
     app.run_polling()
 
 if __name__ == "__main__":
