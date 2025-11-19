@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Time Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-color: #f3f4f6;
@@ -15,199 +15,256 @@
             --red: #ef4444;
             --yellow: #f59e0b;
             --green: #10b981;
-            --blue: #3b82f6;
+            --gray: #9ca3af;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             --radius: 16px;
         }
-        
+
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        
+
         body {
             background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
             color: var(--tg-theme-text-color, var(--text-primary));
             font-family: 'Inter', sans-serif;
-            margin: 0; padding: 16px;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
         }
 
-        .container { max-width: 480px; margin: 0 auto; padding-bottom: 40px; }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding-bottom: 50px;
+        }
 
-        /* Clock Section */
+        /* Clock Header */
         .header-card {
             background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white;
             padding: 24px;
-            border-radius: 20px;
+            border-radius: 24px;
             text-align: center;
             box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4);
-            margin-bottom: 24px;
-        }
-        .clock { font-size: 2.8rem; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-        .date-display { font-size: 0.95rem; opacity: 0.9; margin-top: 4px; font-weight: 500; }
-
-        /* Quote Section */
-        .quote-box {
-            text-align: center;
-            font-style: italic;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-bottom: 20px;
-            padding: 0 10px;
-            min-height: 40px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
         }
 
-        /* Event Cards */
+        .clock-time {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+        .clock-date {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        /* Event Card */
         .card {
             background: var(--tg-theme-bg-color, var(--card-bg));
             border-radius: var(--radius);
             padding: 16px;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            display: flex; align-items: center; justify-content: space-between;
-            transition: transform 0.2s;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: transform 0.2s ease;
+            border: 1px solid rgba(0,0,0,0.05);
         }
-        .card:active { transform: scale(0.98); }
 
-        .card-icon { font-size: 1.5rem; margin-right: 16px; }
-        .card-info { flex-grow: 1; }
-        .card-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 4px; }
-        
-        .date-row { 
-            display: flex; align-items: center; gap: 8px; 
-            font-size: 0.85rem; color: var(--text-secondary);
+        .card:active {
+            transform: scale(0.98);
         }
-        .date-label { font-size: 0.75rem; opacity: 0.7; width: 25px; }
-        .date-val { font-family: monospace; font-weight: 500; }
 
+        .card-content {
+            flex-grow: 1;
+            margin-right: 12px;
+        }
+
+        .card-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+            color: var(--tg-theme-text-color, var(--text-primary));
+        }
+
+        .card-dates {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .date-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .date-tag {
+            font-size: 0.7rem;
+            background: rgba(0,0,0,0.06);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .date-val {
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        /* Badges (Traffic Lights) */
         .badge {
-            padding: 6px 10px; border-radius: 10px;
-            font-size: 0.85rem; font-weight: 700;
-            text-align: center; min-width: 80px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-align: center;
+            min-width: 85px;
             color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            line-height: 1.2;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .badge span { font-size: 0.7rem; opacity: 0.9; font-weight: 500; }
+
+        .bg-red { background-color: var(--red); }
+        .bg-yellow { background-color: var(--yellow); color: white; } /* Text white for contrast */
+        .bg-green { background-color: var(--green); }
+        .bg-gray { background-color: var(--gray); }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            opacity: 0.5;
+            font-size: 1.1rem;
         }
 
-        /* Color Logic Classes */
-        .badge-red { background-color: var(--red); box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
-        .badge-yellow { background-color: var(--yellow); color: #fff; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3); }
-        .badge-green { background-color: var(--green); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); }
-        .badge-gray { background-color: #9ca3af; } /* Passed */
-
-        .empty-state { text-align: center; padding: 50px 0; opacity: 0.6; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header-card">
-        <div class="clock" id="clock">00:00</div>
-        <div class="date-display" id="date-display">Loading...</div>
+        <div class="clock-time" id="clock">00:00</div>
+        <div class="clock-date" id="date-display">Loading...</div>
     </div>
 
-    <div class="quote-box" id="quote"></div>
-    <div id="list"></div>
+    <div id="events-list"></div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    
-    const userData = {{ user_data | tojson }};
-    
-    // 20 Short Random Quotes
-    const quotes = [
-        "Do it now.", "Dream big.", "Stay focused.", "Keep going.", 
-        "Time flies.", "Be productive.", "No excuses.", "Work hard.", 
-        "Stay hungry.", "Make it happen.", "Focus on you.", "Don't stop.",
-        "Believe.", "You can.", "Start today.", "Time is gold.",
-        "Action wins.", "Be consistent.", "Never settle.", "Create future."
-    ];
-    document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 
-    // Clock
+    // دریافت داده‌ها از پایتون
+    const userData = {{ user_data | tojson }};
+
+    // ساعت زنده
     function updateClock() {
         const now = new Date();
         document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
-        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    // --- CORE LOGIC ---
-    const listDiv = document.getElementById('list');
-    
+    // رندر لیست
+    const listDiv = document.getElementById('events-list');
+
     if (Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div class="empty-state">No events added yet.</div>`;
+        listDiv.innerHTML = `<div class="empty-state">No events added yet.<br>Use the bot to add one.</div>`;
     } else {
-        // 1. Convert to Array & Calculate Days
+        // تبدیل به آرایه برای مرتب‌سازی
         const events = Object.entries(userData).map(([key, item]) => {
             const parts = item.date.split('.'); // DD.MM.YYYY
-            // Convert to YYYY-MM-DD for easier JS parsing
-            const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
-            const target = new Date(isoDate);
+            const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
             const today = new Date();
             today.setHours(0,0,0,0);
             
+            // محاسبه اختلاف روز
             const diffTime = target - today;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
             return { ...item, key, diffDays };
         });
 
-        // 2. Sort: Nearest date first
-        // (Using diffDays for sorting. Positive small numbers first)
+        // مرتب‌سازی: نزدیک‌ترین‌ها بالا باشند
         events.sort((a, b) => {
-            // If both are future, sort by nearest
-            if (a.diffDays >= 0 && b.diffDays >= 0) return a.diffDays - b.diffDays;
-            // If both passed, sort by recent passed
-            if (a.diffDays < 0 && b.diffDays < 0) return b.diffDays - a.diffDays;
-            // Future comes before passed
-            return b.diffDays - a.diffDays; 
+            // رویدادهای گذشته بروند ته لیست
+            if (a.diffDays < 0 && b.diffDays >= 0) return 1;
+            if (a.diffDays >= 0 && b.diffDays < 0) return -1;
+            // مرتب‌سازی عادی
+            return a.diffDays - b.diffDays;
         });
 
-        // 3. Render
         let html = '';
         events.forEach(item => {
-            let badgeText = `${item.diffDays} Days`;
-            let badgeClass = 'badge-gray'; // Default (Passed)
+            let badgeClass = 'bg-gray';
+            let badgeText = `${Math.abs(item.diffDays)}`;
+            let badgeSub = 'Days Left';
 
-            // Color Logic
-            if (item.diffDays >= 0) {
-                if (item.diffDays === 0) {
-                    badgeText = "Today!";
-                    badgeClass = 'badge-red';
-                } else if (item.diffDays < 180) { // < 6 Months
-                    badgeClass = 'badge-red';
-                } else if (item.diffDays <= 365) { // 6 Months - 1 Year
-                    badgeClass = 'badge-yellow';
-                } else { // > 1 Year
-                    badgeClass = 'badge-green';
-                }
-            } else {
-                badgeText = "Passed";
+            if (item.diffDays < 0) {
+                badgeClass = 'bg-gray';
+                badgeSub = 'Days Ago';
+            } else if (item.diffDays === 0) {
+                badgeClass = 'bg-red';
+                badgeText = "Today";
+                badgeSub = "Now!";
+            } else if (item.diffDays <= 180) { // کمتر از 6 ماه (قرمز)
+                badgeClass = 'bg-red';
+            } else if (item.diffDays <= 365) { // بین 6 ماه تا 1 سال (زرد)
+                badgeClass = 'bg-yellow';
+            } else { // بیشتر از 1 سال (سبز)
+                badgeClass = 'bg-green';
             }
 
-            // Dates
-            const dateRow = `<div class="date-row"><span class="date-label">EN</span> <span class="date-val">${item.date}</span></div>`;
-            const shamsiRow = item.shamsi_date ? `<div class="date-row"><span class="date-label">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
+            // تاریخ شمسی (اگر وجود داشت)
+            const shamsiRow = item.shamsi_date ? 
+                `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
 
             html += `
             <div class="card">
-                <div class="card-icon">📌</div>
-                <div class="card-info">
+                <div class="card-content">
                     <div class="card-title">${item.title}</div>
-                    ${dateRow}
-                    ${shamsiRow}
+                    <div class="card-dates">
+                        <div class="date-row">
+                            <span class="date-tag">EN</span> 
+                            <span class="date-val">${item.date}</span>
+                        </div>
+                        ${shamsiRow}
+                    </div>
                 </div>
-                <div class="badge ${badgeClass}">${badgeText}</div>
+                <div class="badge ${badgeClass}">
+                    ${badgeText}
+                    <span>${badgeSub}</span>
+                </div>
             </div>`;
         });
+
         listDiv.innerHTML = html;
     }
 
-    // Theme Support
+    // اعمال تم تلگرام
     if (tg.themeParams.bg_color) {
-        document.documentElement.style.setProperty('--bg-color', tg.themeParams.secondary_bg_color);
+        document.documentElement.style.setProperty('--bg-color', tg.themeParams.secondary_bg_color || '#f3f4f6');
         document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
         document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
     }
 </script>
+
 </body>
 </html>
