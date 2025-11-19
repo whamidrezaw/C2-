@@ -5,22 +5,175 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Time Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --red: #ef4444;
+            --yellow: #f59e0b;
+            --green: #10b981;
+            --gray: #9ca3af;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --radius: 16px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
+            color: var(--tg-theme-text-color, var(--text-primary));
+            font-family: 'Inter', sans-serif;
+            margin: 0; padding: 20px;
+        }
+
+        .container { max-width: 500px; margin: 0 auto; padding-bottom: 50px; }
+
+        /* Clock Header */
+        .header-card {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white; padding: 24px; border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4);
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+        .clock-time { font-size: 2.8em; font-weight: 700; letter-spacing: 1px; font-variant-numeric: tabular-nums; line-height: 1; }
+        .clock-date { font-size: 0.95em; opacity: 0.9; margin-top: 8px; font-weight: 500; }
+
+        /* Event Card */
+        .card {
+            background: var(--tg-theme-bg-color, var(--card-bg));
+            border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+            box-shadow: var(--shadow);
+            display: flex; align-items: center; justify-content: space-between;
+            transition: transform 0.2s ease; border: 1px solid rgba(0,0,0,0.05);
+        }
+        .card:active { transform: scale(0.98); }
+
+        .card-content { flex-grow: 1; margin-right: 12px; }
+        .card-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 6px; color: var(--tg-theme-text-color, var(--text-primary)); }
+        
+        .card-dates { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; color: var(--text-secondary); }
+        .date-row { display: flex; align-items: center; gap: 6px; }
+        .date-tag { font-size: 0.7rem; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+        .date-val { font-family: monospace; font-size: 0.9rem; }
+
+        /* Badges */
+        .badge {
+            padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 700;
+            text-align: center; min-width: 85px; color: white;
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; line-height: 1.2; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .badge span { font-size: 0.7rem; opacity: 0.9; font-weight: 500; }
+        
+        .bg-red { background-color: var(--red); }
+        .bg-yellow { background-color: var(--yellow); color: white; }
+        .bg-green { background-color: var(--green); }
+        .bg-gray { background-color: var(--gray); }
+
+        .empty-state { text-align: center; padding: 60px 20px; opacity: 0.5; font-size: 1.1rem; }
+        
+        /* Error Message */
+        .error-screen {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; z-index: 9999; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; padding: 20px;
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-    <div class="clock-card">
+
+<div id="error-screen" class="error-screen">
+    <h1>⛔ Access Denied</h1>
+    <p>Please open this app inside Telegram.</p>
+</div>
+
+<div class="container" id="app-container">
+    <div class="header-card">
         <div class="clock-time" id="clock">00:00</div>
         <div class="clock-date" id="date-display">Loading...</div>
     </div>
-    <div id="content"></div>
+    <div id="events-list"></div>
 </div>
 
-<script src="{{ url_for('static', filename='script.js') }}"></script>
 <script>
-    // Load Data
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    // --- SECURITY CHECK: BLOCK EXTERNAL BROWSERS ---
+    // اگر initData خالی باشد، یعنی خارج از تلگرام باز شده است
+    if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+        document.getElementById('app-container').style.display = 'none';
+        document.getElementById('error-screen').style.display = 'flex';
+        throw new Error("Access Denied: Not in Telegram");
+    }
+
     const userData = {{ user_data | tojson }};
-    render(userData);
+
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    const listDiv = document.getElementById('events-list');
+
+    if (Object.keys(userData).length === 0) {
+        listDiv.innerHTML = `<div class="empty-state">No events added yet.<br>Use the bot to add one.</div>`;
+    } else {
+        const events = Object.entries(userData).map(([key, item]) => {
+            const parts = item.date.split('.');
+            const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            const today = new Date(); today.setHours(0,0,0,0);
+            const diffTime = target - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return { ...item, key, diffDays };
+        });
+
+        events.sort((a, b) => {
+            if (a.diffDays >= 0 && b.diffDays >= 0) return a.diffDays - b.diffDays;
+            if (a.diffDays < 0 && b.diffDays < 0) return b.diffDays - a.diffDays;
+            return b.diffDays - a.diffDays; 
+        });
+
+        let html = '';
+        events.forEach(item => {
+            let badgeClass = 'bg-gray', badgeText = Math.abs(item.diffDays), badgeSub = 'Days Left';
+            if (item.diffDays < 0) { badgeClass = 'bg-gray'; badgeSub = 'Days Ago'; } 
+            else if (item.diffDays === 0) { badgeClass = 'bg-red'; badgeText = "Today"; badgeSub = "Now!"; } 
+            else if (item.diffDays <= 180) badgeClass = 'bg-red'; 
+            else if (item.diffDays <= 365) badgeClass = 'bg-yellow'; 
+            else badgeClass = 'bg-green';
+
+            const shamsiRow = item.shamsi_date ? `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
+
+            html += `
+            <div class="card">
+                <div class="card-content">
+                    <div class="card-title">${item.title}</div>
+                    <div class="card-dates">
+                        <div class="date-row"><span class="date-tag">EN</span> <span class="date-val">${item.date}</span></div>
+                        ${shamsiRow}
+                    </div>
+                </div>
+                <div class="badge ${badgeClass}">${badgeText}<span>${badgeSub}</span></div>
+            </div>`;
+        });
+        listDiv.innerHTML = html;
+    }
+
+    if (tg.themeParams.bg_color) {
+        document.documentElement.style.setProperty('--bg-color', tg.themeParams.secondary_bg_color || '#f3f4f6');
+        document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
+        document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
+    }
 </script>
 </body>
 </html>
