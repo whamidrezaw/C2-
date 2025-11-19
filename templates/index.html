@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Time Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-color: #f3f4f6;
@@ -16,110 +16,172 @@
             --yellow: #f59e0b;
             --green: #10b981;
             --gray: #9ca3af;
+            --blue: #3b82f6;
             --radius: 16px;
         }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
         body {
             background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
             color: var(--tg-theme-text-color, var(--text-primary));
             font-family: 'Inter', sans-serif;
             margin: 0; padding: 20px;
+            padding-bottom: 100px; /* Space for bottom buttons */
         }
-        .container { max-width: 500px; margin: 0 auto; padding-bottom: 50px; }
-        .clock-card {
+
+        .container { max-width: 500px; margin: 0 auto; }
+
+        /* Clock */
+        .header-card {
             background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white; padding: 24px; border-radius: 24px;
-            text-align: center; margin-bottom: 25px;
+            text-align: center; margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
         }
-        .clock-time { font-size: 2.8em; font-weight: 700; }
-        .clock-date { font-size: 0.95em; opacity: 0.9; margin-top: 5px; }
+        .clock { font-size: 2.8rem; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+        .date-display { font-size: 0.95rem; opacity: 0.9; margin-top: 4px; }
+
+        /* Event Card */
         .card {
             background: var(--tg-theme-bg-color, var(--card-bg));
             border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-        .card-info { flex-grow: 1; margin-left: 15px; }
-        .card-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 6px; }
-        .date-row { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-secondary); }
+        .card-info { flex-grow: 1; margin-left: 12px; }
+        .card-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 4px; }
+        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 6px; }
+        .date-tag { font-size: 0.7rem; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+        
         .badge {
-            padding: 8px 0; border-radius: 12px; font-size: 0.85rem; font-weight: 700;
-            text-align: center; width: 80px; color: white; display: flex; flex-direction: column;
+            padding: 8px 0; border-radius: 12px; font-size: 0.9rem; font-weight: 700;
+            text-align: center; min-width: 80px; color: white;
+            display: flex; flex-direction: column;
         }
-        .badge span { font-size: 0.7rem; font-weight: 400; opacity: 0.9; }
+        .badge span { font-size: 0.65rem; font-weight: 400; opacity: 0.95; }
+        
         .bg-red { background-color: var(--red); }
-        .bg-yellow { background-color: var(--yellow); }
+        .bg-yellow { background-color: var(--yellow); color: white; }
         .bg-green { background-color: var(--green); }
         .bg-gray { background-color: var(--gray); }
-        .empty-state { text-align: center; padding: 50px 0; opacity: 0.5; }
+
+        .empty-state { text-align: center; padding: 40px 0; opacity: 0.5; }
+
+        /* Bottom Action Bar */
+        .bottom-bar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 480px;
+            display: flex; gap: 10px; z-index: 100;
+        }
+        .action-btn {
+            flex: 1; padding: 14px; border: none; border-radius: 14px;
+            font-weight: 600; font-size: 1rem; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .action-btn:active { transform: scale(0.96); }
+        .btn-add { background-color: var(--blue); color: white; }
+        .btn-del { background-color: var(--card-bg); color: var(--red); border: 2px solid #f3f4f6; }
+
+        /* Quotes */
+        .quote-box {
+            text-align: center; margin-top: 20px; padding: 15px;
+            font-style: italic; font-size: 0.9rem; color: var(--text-secondary);
+            background: rgba(0,0,0,0.03); border-radius: 12px;
+        }
     </style>
 </head>
 <body>
+
 <div class="container">
-    <div class="clock-card">
-        <div class="clock-time" id="clock">00:00</div>
-        <div class="clock-date" id="date-display">Loading...</div>
+    <div class="header-card">
+        <div class="clock" id="clock">00:00</div>
+        <div class="date-display" id="date-display">Loading...</div>
     </div>
-    <div id="content">Loading Data...</div>
+    <div id="list"></div>
+    <div class="quote-box" id="quote"></div>
+</div>
+
+<div class="bottom-bar">
+    <button class="action-btn btn-del" onclick="sendAction('delete')">
+        🗑 Delete
+    </button>
+    <button class="action-btn btn-add" onclick="sendAction('add')">
+        ➕ Add Event
+    </button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+    
+    const userData = {{ user_data | tojson }};
 
-    // ایمن‌سازی داده‌ها: اگر داده‌ای نبود، آبجکت خالی بگذار
-    let userData = {};
-    try {
-        userData = {{ user_data | tojson }};
-    } catch (e) {
-        console.error("Error parsing user data", e);
-        document.getElementById('content').innerHTML = "Error loading data.";
-    }
+    // 20 Motivational Quotes
+    const quotes = [
+        "Your time is now.", "Don't watch the clock; do what it does. Keep going.", 
+        "The future depends on what you do today.", "Believe you can and you're halfway there.",
+        "Don't count the days, make the days count.", "Success is the sum of small efforts.",
+        "Dream big, start small, but most of all, start.", "Action is the foundational key to all success.",
+        "It always seems impossible until it's done.", "Stay hungry, stay foolish.",
+        "Don't stop when you're tired. Stop when you're done.", "Focus on being productive instead of busy.",
+        "Your limitation—it's only your imagination.", "Push yourself, because no one else is going to do it for you.",
+        "Great things never came from comfort zones.", "Dream it. Wish it. Do it.",
+        "Success doesn't just find you. You have to go out and get it.", "The harder you work for something, the greater you'll feel when you achieve it.",
+        "Dream bigger. Do bigger.", "Don't wait for opportunity. Create it."
+    ];
+    document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 
     function updateClock() {
         const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour12: false, hour:'2-digit', minute:'2-digit'});
+        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
         document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    const listDiv = document.getElementById('content');
+    // Send Action to Bot
+    function sendAction(action) {
+        // This sends data back to the bot and closes the Mini App
+        tg.sendData(action); 
+    }
 
-    if (!userData || Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div class="empty-state">No events found.<br>Add an event in the bot.</div>`;
+    const listDiv = document.getElementById('list');
+    
+    if (Object.keys(userData).length === 0) {
+        listDiv.innerHTML = `<div class="empty-state">List is empty.</div>`;
     } else {
         const events = Object.entries(userData).map(([key, item]) => {
-            // تبدیل تاریخ برای محاسبه
             const parts = item.date.split('.'); 
             const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
             const today = new Date(); today.setHours(0,0,0,0);
-            const diff = Math.ceil((target - today) / 86400000);
+            const diff = Math.ceil((target - today) / (86400000));
             return { ...item, key, diff };
         }).sort((a, b) => a.diff - b.diff);
 
         let html = '';
         events.forEach(item => {
-            let cls = 'bg-gray', txt = Math.abs(item.diff), sub = 'Days Left';
-            
+            let badgeClass = 'bg-gray', txt = Math.abs(item.diff), sub = 'Days Left';
             if (item.diff < 0) { sub = 'Days Ago'; }
-            else if (item.diff === 0) { cls = 'bg-red'; txt = 'Today'; sub = 'Now!'; }
-            else if (item.diff <= 180) cls = 'bg-red';
-            else if (item.diff <= 365) cls = 'bg-yellow';
-            else cls = 'bg-green';
+            else if (item.diff === 0) { badgeClass = 'bg-red'; txt = "Today"; sub = "Now!"; }
+            else if (item.diff <= 180) badgeClass = 'bg-red';
+            else if (item.diff <= 365) badgeClass = 'bg-yellow';
+            else badgeClass = 'bg-green';
 
-            const shamsi = item.shamsi_date ? `<div class="date-row"><span>IR:</span> <span>${item.shamsi_date}</span></div>` : '';
+            const shamsi = item.shamsi_date ? `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
 
             html += `
             <div class="card">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
                     <div class="card-title">${item.title}</div>
-                    <div class="date-row"><span>EN:</span> <span>${item.date}</span></div>
-                    ${shamsi}
+                    <div class="card-dates">
+                        <div class="date-row"><span class="date-tag">EN</span> <span class="date-val">${item.date}</span></div>
+                        ${shamsi}
+                    </div>
                 </div>
-                <div class="badge ${cls}">
-                    ${txt}<span>${sub}</span>
-                </div>
+                <div class="badge ${badgeClass}">${txt}<span>${sub}</span></div>
             </div>`;
         });
         listDiv.innerHTML = html;
