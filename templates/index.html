@@ -5,98 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Time Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        :root { --bg: #f4f6f8; --card: #fff; --text: #333; --sec: #777; --acc: #3390ec; --rad: 16px; }
-        body { background: var(--tg-theme-secondary-bg-color, var(--bg)); color: var(--tg-theme-text-color, var(--text)); font-family: sans-serif; margin: 0; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; padding-bottom: 40px; }
-        .clock-card { background: linear-gradient(135deg, #3390ec, #0078d7); color: white; padding: 20px; border-radius: 20px; text-align: center; margin-bottom: 25px; box-shadow: 0 8px 20px rgba(51, 144, 236, 0.3); }
-        .time { font-size: 2.5em; font-weight: 700; } .date { opacity: 0.9; margin-top: 5px; }
-        .card { background: var(--tg-theme-bg-color, var(--card)); border-radius: var(--rad); padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .info { flex-grow: 1; margin-left: 15px; } .title { font-weight: 600; margin-bottom: 4px; } 
-        .d-row { font-size: 0.85rem; color: var(--sec); display: flex; gap: 6px; }
-        .lbl { opacity: 0.7; width: 25px; font-weight: bold; } .val { font-family: monospace; }
-        .badge { padding: 8px; border-radius: 12px; font-weight: 700; min-width: 70px; text-align: center; color: white; font-size: 0.85rem; display: flex; flex-direction: column; }
-        .badge span { font-size: 0.65rem; font-weight: 400; opacity: 0.9; }
-        .red { background: #e53935; } .yellow { background: #f1c40f; } .green { background: #2ecc71; } .gray { background: #95a5a6; }
-        .empty { text-align: center; opacity: 0.5; padding: 40px 0; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <div class="container">
     <div class="clock-card">
-        <div class="time" id="clock">00:00</div>
-        <div class="date" id="date-display">Loading...</div>
+        <div class="clock-time" id="clock">00:00</div>
+        <div class="clock-date" id="date-display">Loading...</div>
     </div>
     <div id="content"></div>
 </div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
-    // داده‌های امن تزریق شده
+    // Load Data
     const userData = {{ user_data | tojson }};
-
-    function updateClock() {
-        const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour12: false, hour:'2-digit', minute:'2-digit'});
-        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
-    }
-    setInterval(updateClock, 1000); updateClock();
-
-    const div = document.getElementById('content');
-    
-    // تابع امن برای جلوگیری از XSS (تبدیل کاراکترهای خطرناک)
-    function escapeHtml(text) {
-        if (!text) return text;
-        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
-
-    if (Object.keys(userData).length === 0) {
-        div.innerHTML = `<div class="empty">List is empty.</div>`;
-    } else {
-        const events = Object.values(userData).sort((a, b) => {
-            return a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join(''));
-        });
-
-        let html = '';
-        events.forEach(item => {
-            const parts = item.date.split('.');
-            const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-            const today = new Date(); today.setHours(0,0,0,0);
-            const diff = Math.ceil((target - today) / 86400000);
-            
-            let cls = 'gray', txt = Math.abs(diff), sub = 'Days Left';
-            if (diff < 0) { sub = 'Days Ago'; }
-            else if (diff === 0) { cls = 'red'; txt = 'Today'; sub = 'Now'; }
-            else if (diff <= 180) cls = 'red';
-            else if (diff <= 365) cls = 'yellow';
-            else cls = 'green';
-
-            // استفاده از escapeHtml برای امنیت
-            const titleSafe = escapeHtml(item.title);
-            const dateSafe = escapeHtml(item.date);
-            const shamsiSafe = escapeHtml(item.shamsi_date || "");
-            const shamsiHtml = shamsiSafe ? `<div class="d-row"><span class="lbl">IR</span><span class="val">${shamsiSafe}</span></div>` : '';
-
-            html += `
-            <div class="card">
-                <div style="font-size: 24px">📌</div>
-                <div class="info">
-                    <div class="title">${titleSafe}</div>
-                    <div class="d-row"><span class="lbl">EN</span><span class="val">${dateSafe}</span></div>
-                    ${shamsiHtml}
-                </div>
-                <div class="badge ${cls}">${txt}<span>${sub}</span></div>
-            </div>`;
-        });
-        div.innerHTML = html;
-    }
-
-    if(tg.themeParams.bg_color) {
-        document.body.style.backgroundColor = tg.themeParams.secondary_bg_color;
-        document.documentElement.style.setProperty('--card', tg.themeParams.bg_color);
-        document.documentElement.style.setProperty('--text', tg.themeParams.text_color);
-    }
+    render(userData);
 </script>
 </body>
 </html>
