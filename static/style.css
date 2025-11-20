@@ -1,29 +1,61 @@
-body{
-    font-family: Arial, sans-serif;
-    background: #f5f5f5;
+:root {
+    --bg-color: #f4f6f8;
+    --card-bg: #ffffff;
+    --text-primary: #333333;
+    --text-secondary: #777777;
+    --accent-color: #3390ec;
+    --danger-color: #e53935;
+    --success-color: #2ecc71;
+    --warning-color: #f1c40f;
+    --radius: 16px;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+body {
+    background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
+    color: var(--tg-theme-text-color, var(--text-primary));
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
-    padding: 2rem;
-    color: #333;
+    padding: 20px;
+    transition: all 0.3s ease;
 }
-h1{
-    margin-top: 0;
+
+.container { max-width: 500px; margin: 0 auto; padding-bottom: 40px; }
+
+/* Clock */
+.clock-card {
+    background: linear-gradient(135deg, #3390ec, #0078d7);
+    color: white; padding: 20px; border-radius: 20px;
+    box-shadow: 0 8px 20px rgba(51, 144, 236, 0.3);
+    margin-bottom: 25px; text-align: center;
 }
-ul{
-    list-style: none;
-    padding: 0;
+.clock-time { font-size: 2.5em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.clock-date { font-size: 0.9em; opacity: 0.9; margin-top: 5px; }
+
+/* Card */
+.card {
+    background: var(--tg-theme-bg-color, var(--card-bg));
+    border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+    box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between;
+    animation: fadeIn 0.5s ease;
 }
-li{
-    background: #fff;
-    margin: .5rem 0;
-    padding: .75rem 1rem;
-    border-radius: 6px;
-    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.card-info { flex-grow: 1; margin-left: 15px; }
+.card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
+
+.card-date-group { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+.date-row { display: flex; align-items: center; gap: 6px; }
+.date-label { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; width: 40px; }
+.date-val { font-weight: 500; font-family: monospace; font-size: 0.95rem; }
+
+.card-badge {
+    padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: bold;
+    min-width: 65px; text-align: center; color: white;
 }
-.date{
-    color: #555;
-}
-.footer{
-    margin-top: 2rem;
-    font-size: .9rem;
-    color: #777;
-}
+.bg-red { background-color: var(--danger-color); }
+.bg-yellow { background-color: var(--warning-color); }
+.bg-green { background-color: var(--success-color); }
+.bg-gray { background-color: #95a5a6; }
+
+.empty-state { text-align: center; opacity: 0.5; padding: 40px 0; }

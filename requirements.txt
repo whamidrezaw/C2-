@@ -1,6 +1,6 @@
-python-telegram-bot==20.7
-Flask==2.3.3
-pymongo==4.15.4
-jdatetime==5.2.0
-tenacity==9.1.2
-certifi==2025.11.12
+python-telegram-bot
+flask
+pymongo
+certifi
+jdatetime
+tenacity
