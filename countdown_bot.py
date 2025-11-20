@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Event Reminder Bot – Single File – English Only
-All features preserved: Mongo, Flask, WebApp, Rate-Limit, Date-Parser, Retry, Support, Delete, etc.
-No extra folders or modules created.
+Event Reminder Bot – English Only
+MongoDB, Flask, WebApp, Rate-Limit, Persian/Georgian Date Parser, Retry, Support, Delete
 """
 
-import os, logging, threading, json, re, time, certifi, ssl
+import os, logging, threading, json, re, time
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, abort
 from telegram import (
-    Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo,
-    InlineKeyboardMarkup, InlineKeyboardButton
+    Update, ReplyKeyboardMarkup, KeyboardButton,
+    WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 )
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
@@ -19,17 +18,16 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 from pymongo import MongoClient
-import jdatetime
+import certifi, jdatetime
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-# ------------------ CONFIG ------------------
+app = Flask(__name__, template_folder='templates')
+
+# ---------- CONFIG ----------
 BOT_TOKEN   = os.getenv("BOT_TOKEN")
 MONGO_URI   = os.getenv("MONGO_URI")
-WEBAPP_URL  = os.getenv("WEBAPP_URL_BASE")        # https://yourapp.onrender.com
+WEBAPP_URL  = os.getenv("WEBAPP_URL_BASE")
 ADMIN_ID    = int(os.getenv("ADMIN_ID", 0))
-
-if not BOT_TOKEN or not MONGO_URI:
-    exit("Missing BOT_TOKEN or MONGO_URI env vars")
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -37,7 +35,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ------------------ DB ------------------
+if not BOT_TOKEN or not MONGO_URI:
+    logger.critical("Missing BOT_TOKEN or MONGO_URI")
+    exit(1)
+
+# ---------- DB ----------
 ca = certifi.where()
 client = MongoClient(
     MONGO_URI, tls=True, tlsCAFile=ca,
@@ -47,20 +49,18 @@ db = client["time_manager_db"]
 users_coll = db["users"]
 rate_coll  = db["rate_limit"]
 
-# ------------------ FLASK ------------------
-app_flask = Flask(__name__, template_folder="templates")
+# ---------- FLASK ----------
+@app.route("/")
+def home(): return "Bot is Running (English V2)"
 
-@app_flask.route("/")
-def home(): return "Bot is Running (Single-File V2)"
-
-@app_flask.route("/healthz")
+@app.route("/healthz")
 def health():
     try:
         client.admin.command("ping")
         return "OK", 200
     except: return "DB ERROR", 500
 
-@app_flask.route("/webapp/<user_id>")
+@app.route("/webapp/<user_id>")
 def webapp(user_id):
     data = get_user_data(user_id)
     targets = data.get("targets", {})
@@ -72,10 +72,10 @@ def webapp(user_id):
         except: item["shamsi_date"] = ""
     return render_template("index.html", user_data=targets)
 
-def run_server(): app_flask.run(host="0.0.0.0", port=10000)
+def run_server(): app.run(host="0.0.0.0", port=10000)
 threading.Thread(target=run_server, daemon=True).start()
 
-# ------------------ DB HELPERS ------------------
+# ---------- DB HELPERS ----------
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
 def get_user_data(uid: str):
     data = users_coll.find_one({"_id": uid})
@@ -88,7 +88,7 @@ def get_user_data(uid: str):
 def update_db(uid: str, data: dict):
     users_coll.update_one({"_id": uid}, {"$set": data}, upsert=True)
 
-# ------------------ RATE LIMIT ------------------
+# ---------- RATE LIMIT ----------
 def check_rate(uid: str) -> bool:
     now = datetime.utcnow()
     rec = rate_coll.find_one({"_id": uid})
@@ -102,7 +102,7 @@ def check_rate(uid: str) -> bool:
     rate_coll.update_one({"_id": uid}, {"$inc": {"count": 1}})
     return True
 
-# ------------------ DATE PARSER ------------------
+# ---------- DATE PARSER ----------
 def parse_date(ds: str):
     ds = str(ds).strip()[:20]
     ds = ds.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
@@ -124,7 +124,7 @@ def parse_date(ds: str):
     except: return None
     return None
 
-# ------------------ KEYBOARDS ------------------
+# ---------- KEYBOARDS ----------
 def main_kb(uid: str):
     url = f"{WEBAPP_URL}/webapp/{uid}" if WEBAPP_URL else ""
     btn_app = KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url)) if url else KeyboardButton("⚠️ Config Error")
@@ -134,11 +134,11 @@ def main_kb(uid: str):
         [KeyboardButton("📞 Support")]
     ], resize_keyboard=True, is_persistent=True)
 
-# ------------------ STATES ------------------
+# ---------- STATES ----------
 GET_TITLE, GET_DATE = range(2)
 GET_SUPPORT = 10
 
-# ------------------ HANDLERS ------------------
+# ---------- HANDLERS ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     if not check_rate(uid): return
@@ -261,7 +261,7 @@ async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer("Deleted!")
     await query.delete_message()
 
-# ---- CANCEL ----
+# ---- CANCEL / UNKNOWN ----
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❌ Action Canceled.",
@@ -269,7 +269,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ---- UNKNOWN / MEDIA ----
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Please use the buttons below.",
@@ -299,16 +298,16 @@ def main():
         fallbacks=[MessageHandler(filters.ALL, cancel)]
     )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(conv_add)
     app.add_handler(conv_support)
     app.add_handler(MessageHandler(filters.Regex("^🗑 Delete Event$"), delete_trigger))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CallbackQueryHandler(delete_cb, pattern="^del_"))
     app.add_handler(MessageHandler(filters.ALL, unknown))
     app.add_error_handler(error_handler)
 
-    logger.info("Bot started (Single-File V2)")
+    logger.info("Bot started (English V2)")
     app.run_polling()
 
 if __name__ == "__main__":
