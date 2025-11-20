@@ -7,7 +7,7 @@ import jdatetime
 import certifi
 from flask import Flask, render_template
 from pymongo import MongoClient
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonWebApp
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 # --- CONFIGURATION ---
@@ -16,7 +16,7 @@ app = Flask(__name__, template_folder='templates')
 # Load Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
-WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")  # e.g. https://your-app.render.com
+WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -37,7 +37,8 @@ def connect_db():
         if client is None:
             ca = certifi.where()
             client = MongoClient(MONGO_URI, tls=True, tlsCAFile=ca, serverSelectionTimeoutMS=5000)
-            client.admin.command('ping') # Test connection
+            # Test connection
+            client.admin.command('ping')
             db = client['time_manager_db']
             users_collection = db['users']
             logger.info("✅ MONGODB CONNECTED")
@@ -54,34 +55,43 @@ def home():
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     coll = connect_db()
-    if not coll:
-        return "Database Error", 500
-
-    # Fetch data
-    raw_data = coll.find_one({"_id": str(user_id)})
-    targets = raw_data.get('targets', {}) if raw_data else {}
     
-    # Pre-process for frontend
-    for key, item in targets.items():
-        try:
-            # Add Persian Date for display
-            g_date = datetime.strptime(item['date'], "%d.%m.%Y")
-            j_date = jdatetime.date.fromgregorian(date=g_date.date())
-            item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
-        except Exception: 
-            item['shamsi_date'] = ""
-            
-    return render_template('index.html', user_data=targets)
+    # FIX 1: Explicit check against None (Fixes the 500 Error)
+    if coll is None:
+        logger.error("Database connection failed in WebApp route")
+        return "Database Error - Check Logs", 500
+
+    try:
+        # Fetch data
+        raw_data = coll.find_one({"_id": str(user_id)})
+        targets = raw_data.get('targets', {}) if raw_data else {}
+        
+        # Pre-process for frontend
+        for key, item in targets.items():
+            try:
+                # Add Persian Date for display
+                g_date = datetime.strptime(item['date'], "%d.%m.%Y")
+                j_date = jdatetime.date.fromgregorian(date=g_date.date())
+                item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
+            except Exception: 
+                item['shamsi_date'] = ""
+                
+        return render_template('index.html', user_data=targets)
+    except Exception as e:
+        logger.error(f"Error in webapp route: {e}")
+        return "Application Error", 500
 
 def run_flask():
-    # Run Flask on port 10000 (common for Render) or 5000
+    # Run Flask on port 10000 (common for Render)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 # --- DATA HELPERS ---
 def get_user_data(uid):
     coll = connect_db()
-    if coll is None: return {"_id": str(uid), "targets": {}}
+    # FIX 2: Explicit check
+    if coll is None: 
+        return {"_id": str(uid), "targets": {}}
     
     try:
         data = coll.find_one({"_id": str(uid)})
@@ -127,7 +137,7 @@ def parse_smart_date(date_str):
 # --- KEYBOARDS ---
 def main_kb(uid):
     if not WEBAPP_URL_BASE:
-        url = "https://telegram.org" # Fallback
+        url = "https://telegram.org" 
     else:
         url = f"{WEBAPP_URL_BASE}/webapp/{uid}"
         
@@ -144,17 +154,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     get_user_data(uid) # Init DB entry
     await update.message.reply_text("👋 **Welcome!** Manage your time.", reply_markup=main_kb(uid), parse_mode='Markdown')
 
+async def post_init(application: Application):
+    """Sets the Menu Button when the bot starts."""
+    if not WEBAPP_URL_BASE:
+        logger.warning("⚠️ WEBAPP_URL_BASE is missing. Menu Button not set.")
+        return
+    try:
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE))
+        )
+        logger.info("✅ Menu Button Set Successfully!")
+    except Exception as e:
+        logger.error(f"❌ Failed to set Menu Button: {e}")
+
 # --- THE BRIDGE: Handle Data from Mini App ---
 async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.effective_message.web_app_data.data
     
     if data == "add":
-        # Start the Add Conversation
         await add_start(update, context)
-        # We need to manually set the state because we are entering from a different handler
         return GET_TITLE 
     elif data == "delete":
-        # Trigger Delete logic
         await delete_trigger(update, context)
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -174,6 +194,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if formatted:
         coll = connect_db()
+        # FIX 3: Explicit check
         if coll is not None:
             new_id = f"evt_{uuid.uuid4().hex[:8]}"
             new_item = {
@@ -214,12 +235,11 @@ async def delete_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = query.data.replace("del_", "")
     
     coll = connect_db()
+    # FIX 4: Explicit check
     if coll is not None:
         coll.update_one({"_id": str(uid)}, {"$unset": {f"targets.{key}": ""}})
         await query.answer("Deleted")
         await query.delete_message()
-        # Optional: Send confirmation
-        # await context.bot.send_message(chat_id=uid, text="🗑 Event deleted.", reply_markup=main_kb(uid))
     else: 
         await query.answer("Error")
 
@@ -232,13 +252,12 @@ def main():
         print("❌ Error: BOT_TOKEN is missing")
         return
 
-    app_bot = Application.builder().token(BOT_TOKEN).build()
+    # Added post_init to auto-configure the menu button
+    app_bot = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
-    # Conversation Handler
     conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^(➕|Add)"), add_start),
-            # BRIDGE: Listen for Web App Data specifically to start Adding
             MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data) 
         ],
         states={
