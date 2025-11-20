@@ -17,8 +17,13 @@ app = Flask(__name__, template_folder='templates')
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")
-# CHANGE THIS TO YOUR USERNAME (No @ symbol)
-SUPPORT_USERNAME = "YourUsernameHere" 
+
+# ⚠️ ADD YOUR ADMIN ID HERE (This is the numeric ID of your Telegram Account)
+# You can find it by messaging @userinfobot
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID")) 
+except:
+    ADMIN_ID = None # Code will warn if missing
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -29,11 +34,8 @@ client = None
 users_collection = None
 
 def connect_db():
-    """Establishes or refreshes DB connection safely."""
     global client, users_collection
-    if not MONGO_URI:
-        logger.error("❌ MONGO_URI is missing!")
-        return None
+    if not MONGO_URI: return None
     try:
         if client is None:
             ca = certifi.where()
@@ -50,50 +52,35 @@ def connect_db():
 # --- FLASK SERVER ---
 @app.route('/')
 def home():
-    # FIX: This script automatically detects the User ID from Telegram
-    # and redirects them to the correct /webapp/<id> page.
     return """
-    <html>
-    <head>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    </head>
+    <html><head><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
     <body style="background-color:#f4f6f8; font-family:sans-serif; text-align:center; padding-top:50px;">
-        <p>Loading your data...</p>
+        <p>Loading...</p>
         <script>
             const tg = window.Telegram.WebApp;
             tg.ready();
             if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 window.location.href = "/webapp/" + tg.initDataUnsafe.user.id;
-            } else {
-                document.body.innerHTML = "<p>Please open this from inside Telegram.</p>";
-            }
+            } else { document.body.innerHTML = "<p>Please open inside Telegram.</p>"; }
         </script>
-    </body>
-    </html>
+    </body></html>
     """
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
     coll = connect_db()
     if coll is None: return "Database Error", 500
-
     try:
         raw_data = coll.find_one({"_id": str(user_id)})
         targets = raw_data.get('targets', {}) if raw_data else {}
-        
-        # Pre-process for frontend
         for key, item in targets.items():
             try:
                 g_date = datetime.strptime(item['date'], "%d.%m.%Y")
                 j_date = jdatetime.date.fromgregorian(date=g_date.date())
                 item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
-            except Exception: 
-                item['shamsi_date'] = ""
-                
+            except: item['shamsi_date'] = ""
         return render_template('index.html', user_data=targets)
-    except Exception as e:
-        logger.error(f"Webapp Error: {e}")
-        return "Application Error", 500
+    except: return "Application Error", 500
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -111,7 +98,6 @@ def get_user_data(uid):
         return data
     except: return {"_id": str(uid), "targets": {}}
 
-# --- DATE PARSER ---
 def parse_smart_date(date_str):
     if not date_str: return None
     date_str = date_str.replace('/', '.').replace('-', '.')
@@ -139,27 +125,26 @@ def main_kb(uid):
     return ReplyKeyboardMarkup([
         [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
         [KeyboardButton("➕ Add Event"), KeyboardButton("🗑 Delete Event")],
-        [KeyboardButton("📞 Contact Support")] 
+        [KeyboardButton("📞 Contact Support")]
     ], resize_keyboard=True)
 
-# --- HANDLERS ---
+# --- STATES ---
 GET_TITLE, GET_DATE = range(2)
+SUPPORT_MSG = range(1)
 
+# --- START & MENU ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     get_user_data(uid)
-    
-    welcome_text = (
-        "🌟 **Welcome to Time Manager Bot!** 🌟\n\n"
-        "I am your smart assistant to track important events, birthdays, and deadlines.\n\n"
-        "✨ **What can I do?**\n"
-        "🔹 **Countdowns:** See exactly how many days are left.\n"
-        "🔹 **Date Conversion:** I understand both Gregorian and Shamsi dates.\n"
-        "🔹 **Visuals:** A beautiful Mini App to view your list.\n"
-        "🔹 **Smart Alerts:** Colors change as the date gets closer!\n\n"
-        "👇 **Select an option below to start:**"
+    text = (
+        "🌟 **Welcome to Time Manager!**\n\n"
+        "I track your events and count down the days.\n\n"
+        "🔹 **Red:** < 6 Months\n"
+        "🔹 **Yellow:** 6-12 Months\n"
+        "🔹 **Green:** > 1 Year\n\n"
+        "Select an option below:"
     )
-    await update.message.reply_text(welcome_text, reply_markup=main_kb(uid), parse_mode='Markdown')
+    await update.message.reply_text(text, reply_markup=main_kb(uid), parse_mode='Markdown')
 
 async def post_init(application: Application):
     if WEBAPP_URL_BASE:
@@ -167,26 +152,26 @@ async def post_init(application: Application):
             await application.bot.set_chat_menu_button(
                 menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE))
             )
-        except Exception as e: logger.error(f"Menu Button Error: {e}")
+        except: pass
 
-async def support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"📬 **Need Help?**\n\nClick below to message support directly."
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Open Chat", url=f"https://t.me/{SUPPORT_USERNAME}")]])
-    await update.message.reply_text(text, reply_markup=kb, parse_mode='Markdown')
-
-# --- WEBAPP DATA BRIDGE ---
-async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = update.effective_message.web_app_data.data
-    if data == "add":
-        await add_start(update, context)
-        return GET_TITLE 
-    elif data == "delete":
-        await delete_menu(update, context)
-
-# --- ADD EVENT FLOW ---
+# --- ADD EVENT CONVERSATION ---
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
     return GET_TITLE
+
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # This handles data coming from the Mini App
+    data = update.effective_message.web_app_data.data
+    
+    if data == "add":
+        # Manually trigger the start of the Add flow
+        await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
+        return GET_TITLE
+    
+    elif data == "delete":
+        # Trigger delete menu and END conversation (since delete is not a conversation state)
+        await delete_menu(update, context)
+        return ConversationHandler.END
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "❌ Cancel": return await cancel(update, context)
@@ -206,8 +191,6 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_item = {"title": context.user_data['title'], "date": formatted}
             coll.update_one({"_id": str(uid)}, {"$set": {f"targets.{new_id}": new_item}}, upsert=True)
             await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
-        else:
-            await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
         return ConversationHandler.END
     else:
         await update.message.reply_text("❌ **Invalid Date!** Try again:", parse_mode='Markdown')
@@ -217,16 +200,17 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Action Canceled.", reply_markup=main_kb(update.effective_user.id))
     return ConversationHandler.END
 
-# --- DELETE FLOW (WITH CONFIRMATION) ---
+# --- DELETE LOGIC ---
 async def delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     data = get_user_data(uid)
     targets = data.get('targets', {})
-    if not targets: return await update.message.reply_text("📭 Your list is empty.")
-    
+    if not targets: 
+        await update.message.reply_text("📭 Your list is empty.", reply_markup=main_kb(uid))
+        return
+
     kb = []
     for k, v in targets.items():
-        # Stage 1: Select item to delete
         kb.append([InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"ask_{k}")])
     await update.message.reply_text("🗑 **Select an event to delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
 
@@ -236,38 +220,85 @@ async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
     if data.startswith("ask_"):
-        # Stage 2: Ask for confirmation
         key = data.replace("ask_", "")
-        # Store key temporarily? No need, pass it in button
         kb = [
             [InlineKeyboardButton("✅ Yes, Delete", callback_data=f"confirm_{key}")],
             [InlineKeyboardButton("❌ No, Keep it", callback_data="cancel_del")]
         ]
-        await query.edit_message_text("⚠️ **Are you sure you want to delete this event?**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
+        await query.edit_message_text("⚠️ **Are you sure?**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
 
     elif data.startswith("confirm_"):
-        # Stage 3: Actually Delete
         key = data.replace("confirm_", "")
         coll = connect_db()
         if coll:
             coll.update_one({"_id": str(uid)}, {"$unset": {f"targets.{key}": ""}})
-            await query.answer("Deleted Successfully")
-            await query.edit_message_text("🗑 Event has been deleted.")
-        else:
-            await query.answer("Database Error")
-
+            await query.answer("Deleted")
+            await query.edit_message_text("🗑 Deleted.")
+    
     elif data == "cancel_del":
         await query.answer("Cancelled")
         await query.delete_message()
 
-# --- INPUT GUARD (IGNORE RANDOM MESSAGES) ---
-async def ignore_wrong_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This runs if the user sends text/photo that isn't a command or part of a flow
+# --- SUPPORT SYSTEM ---
+async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "⛔ **I didn't understand that.**\n\nPlease use the buttons below to control the bot.",
-        reply_markup=main_kb(update.effective_user.id),
+        "📬 **Support**\n\nPlease type your message below. I will send it to the admin anonymously.",
+        reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True),
         parse_mode='Markdown'
     )
+    return SUPPORT_MSG
+
+async def support_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message.text
+    if msg == "❌ Cancel": return await cancel(update, context)
+    
+    user = update.effective_user
+    
+    # Forward to Admin
+    if ADMIN_ID:
+        admin_text = (
+            f"📩 **New Support Message**\n"
+            f"👤 User ID: `{user.id}`\n"
+            f"📝 Name: {user.first_name}\n\n"
+            f"{msg}\n\n"
+            f"👉 To reply: `/reply {user.id} Your Message`"
+        )
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode='Markdown')
+            await update.message.reply_text("✅ **Message Sent!** Please wait for a reply.", reply_markup=main_kb(user.id), parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Support Error: {e}")
+            await update.message.reply_text("❌ Error sending message. Admin might not be configured.")
+    else:
+        await update.message.reply_text("❌ Support is currently unavailable (Admin ID not set).")
+        
+    return ConversationHandler.END
+
+async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Usage: /reply <user_id> <message>
+    if update.effective_user.id != ADMIN_ID: return # Security check
+    
+    try:
+        args = context.args
+        if len(args) < 2:
+            await update.message.reply_text("⚠️ Usage: `/reply <user_id> <message>`", parse_mode='Markdown')
+            return
+            
+        target_uid = args[0]
+        reply_text = " ".join(args[1:])
+        
+        await context.bot.send_message(
+            chat_id=target_uid,
+            text=f"📨 **Support Reply:**\n\n{reply_text}",
+            parse_mode='Markdown'
+        )
+        await update.message.reply_text("✅ Reply sent successfully.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed: {e}")
+
+# --- IGNORE INVALID INPUTS ---
+async def ignore_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⛔ Please use the buttons.", reply_markup=main_kb(update.effective_user.id))
 
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
@@ -275,10 +306,11 @@ def main():
 
     app_bot = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
-    conv = ConversationHandler(
+    # 1. Add Event Conversation
+    add_conv = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^(➕|Add)"), add_start),
-            MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data) 
+            MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data)
         ],
         states={
             GET_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_title)],
@@ -287,16 +319,25 @@ def main():
         fallbacks=[MessageHandler(filters.ALL, cancel)]
     )
     
-    app_bot.add_handler(conv)
+    # 2. Support Conversation
+    support_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^(📞|Contact)"), support_start)],
+        states={SUPPORT_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, support_receive)]},
+        fallbacks=[MessageHandler(filters.ALL, cancel)]
+    )
+
+    app_bot.add_handler(add_conv)
+    app_bot.add_handler(support_conv)
+    
+    app_bot.add_handler(CommandHandler("reply", admin_reply))
     app_bot.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_menu))
-    app_bot.add_handler(MessageHandler(filters.Regex("^(📞|Contact)"), support_handler))
     app_bot.add_handler(CommandHandler("start", start))
     app_bot.add_handler(CallbackQueryHandler(delete_callback))
     
-    # CATCH-ALL HANDLER: Must be LAST. Ignores random text/media
-    app_bot.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, ignore_wrong_input))
+    # Catch-all for random input
+    app_bot.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, ignore_unknown))
     
-    print("✅ Bot Updated & Running...")
+    print("✅ Bot Running...")
     app_bot.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
