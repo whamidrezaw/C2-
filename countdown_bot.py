@@ -11,14 +11,13 @@ from pymongo import MongoClient
 import certifi
 import jdatetime
 import ssl
-import config
 
 app = Flask(__name__, template_folder='templates')
 
-# --- CONFIGURATION ---
-BOT_TOKEN = config.BOT_TOKEN
-MONGO_URI = config.MONGO_URI
-WEBAPP_URL_BASE = config.WEBAPP_URL_BASE
+# --- CONFIGURATION (Environment Variables) ---
+BOT_TOKEN   = os.getenv("BOT_TOKEN")
+MONGO_URI   = os.getenv("MONGO_URI")
+WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -36,7 +35,7 @@ try:
 except Exception as e:
     logger.error(f"❌ DB CONNECTION FAILED: {e}")
     users_collection = None
-
+    
 # --- FLASK SERVER ---
 @app.route('/')
 def home(): return "Bot is Running (Fixed Collection Check)"
