@@ -116,15 +116,11 @@
 </div>
 
 <script>
-    // 1. Initialize Telegram
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // 2. Load Data from Python
-    // Safe parsing: if user_data is empty, it becomes an empty object
     const userData = {{ user_data | tojson }};
 
-    // 3. Clock Logic
     function updateClock() {
         const now = new Date();
         document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
@@ -133,20 +129,16 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 4. Send Action to Bot
     function sendAction(action) {
-        // Sends "add" or "delete" to the Python function handle_webapp_data
         tg.sendData(action); 
     }
 
-    // 5. Render List
     const listDiv = document.getElementById('list');
     
     if (!userData || Object.keys(userData).length === 0) {
         listDiv.innerHTML = `<div class="empty-state">No events yet.<br>Tap "Add Event" below.</div>`;
     } else {
         const events = Object.entries(userData).map(([key, item]) => {
-            // Safe Date Parsing
             try {
                 const parts = item.date.split('.'); 
                 const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
@@ -154,7 +146,7 @@
                 const diff = Math.ceil((target - today) / (86400000));
                 return { ...item, key, diff };
             } catch(e) {
-                return { ...item, key, diff: 0 }; // Fallback for bad dates
+                return { ...item, key, diff: 0 }; 
             }
         }).sort((a, b) => a.diff - b.diff);
 
@@ -162,13 +154,26 @@
         events.forEach(item => {
             let badgeClass = 'bg-gray', txt = Math.abs(item.diff), sub = 'Days Left';
             
-            if (item.diff < 0) { sub = 'Days Ago'; badgeClass = 'bg-gray'; }
-            else if (item.diff === 0) { badgeClass = 'bg-red'; txt = "Today"; sub = "Now!"; }
-            else if (item.diff <= 30) badgeClass = 'bg-red';
-            else if (item.diff <= 180) badgeClass = 'bg-yellow';
-            else badgeClass = 'bg-green';
+            if (item.diff < 0) { 
+                sub = 'Days Ago'; 
+                badgeClass = 'bg-gray'; 
+            }
+            else if (item.diff === 0) { 
+                badgeClass = 'bg-red'; 
+                txt = "Today"; 
+                sub = "Now!"; 
+            }
+            // UPDATED COLOR LOGIC HERE
+            else if (item.diff < 180) { 
+                badgeClass = 'bg-red'; // Less than 6 months
+            }
+            else if (item.diff <= 365) { 
+                badgeClass = 'bg-yellow'; // 6 to 12 months
+            }
+            else { 
+                badgeClass = 'bg-green'; // More than a year
+            }
 
-            // Only show Shamsi if it exists
             const shamsi = item.shamsi_date ? `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
 
             html += `
@@ -187,7 +192,6 @@
         listDiv.innerHTML = html;
     }
 
-    // 6. Theming (Auto-detect Dark/Light)
     if (tg.themeParams) {
         const r = document.documentElement.style;
         const p = tg.themeParams;
@@ -198,11 +202,7 @@
         if (p.button_color) r.setProperty('--blue', p.button_color);
     }
 
-    // 7. Random Quote
-    const quotes = [
-        "Your time is now.", "Action is the key to success.", 
-        "Make today count.", "Focus on being productive."
-    ];
+    const quotes = ["Make it happen.", "Stay focused.", "Time is precious.", "Keep moving forward."];
     document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 </script>
 </body>
