@@ -279,10 +279,14 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Update %s caused error %s", update, context.error)
 
-# ---- MAIN ----
+# ---------- MAIN ----------
 def main():
     defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
     app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
+
+    # ---- ثبت هندلرها ----
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
 
     conv_add = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^➕ Add Event$"), add_start)],
@@ -301,8 +305,6 @@ def main():
     app.add_handler(conv_add)
     app.add_handler(conv_support)
     app.add_handler(MessageHandler(filters.Regex("^🗑 Delete Event$"), delete_trigger))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CallbackQueryHandler(delete_cb, pattern="^del_"))
     app.add_handler(MessageHandler(filters.ALL, unknown))
     app.add_error_handler(error_handler)
