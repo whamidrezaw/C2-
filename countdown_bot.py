@@ -15,7 +15,7 @@ import jdatetime
 import ssl
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-app = Flask(_name_, template_folder='templates')
+app = Flask(__name__, template_folder='templates')
 
 # --- CONFIGURATION ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -30,7 +30,7 @@ except:
 
 # Logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 if not BOT_TOKEN or not MONGO_URI:
     logger.critical("❌ MISSING CRITICAL ENV VARS (BOT_TOKEN / MONGO_URI)")
@@ -331,5 +331,5 @@ def main():
     print("Bot Running (Secured & Robust)...")
     app.run_polling()
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     main()
