@@ -108,7 +108,11 @@ SUPPORT_MSG = range(1)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     coll = get_collection()
-    if coll: coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
+    
+    # FIXED: Explicit check is not None
+    if coll is not None: 
+        coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
+        
     await update.message.reply_text(
         f"👋 **Hello {update.effective_user.first_name}!**\n\nSelect an option:",
         reply_markup=main_kb(uid), parse_mode='Markdown'
@@ -119,17 +123,13 @@ async def post_init(application: Application):
         try: await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE)))
         except: pass
 
-# --- CRITICAL: HANDLE WEB APP DATA ---
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Catches data sent from the Mini App buttons"""
     data = update.effective_message.web_app_data.data
-    
     if data == "add":
         await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
         return GET_TITLE
-    
     elif data == "delete":
-        # Directly trigger delete menu
         await delete_menu_logic(update, context)
         return ConversationHandler.END
 
@@ -155,7 +155,8 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if formatted:
         coll = get_collection()
-        if coll:
+        # FIXED: Explicit check is not None
+        if coll is not None:
             evt_id = f"evt_{uuid.uuid4().hex[:6]}"
             new_item = {"title": context.user_data['title'], "date": formatted}
             coll.update_one({"_id": uid}, {"$set": {f"targets.{evt_id}": new_item}}, upsert=True)
@@ -178,8 +179,13 @@ async def delete_menu_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def delete_menu_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     coll = get_collection()
-    user_doc = coll.find_one({"_id": uid}) if coll else None
-    targets = user_doc.get('targets', {}) if user_doc else {}
+    
+    # FIXED: Explicit check is not None
+    if coll is not None:
+        user_doc = coll.find_one({"_id": uid})
+        targets = user_doc.get('targets', {}) if user_doc else {}
+    else:
+        targets = {}
     
     if not targets:
         await update.message.reply_text("📭 **List is empty.**", reply_markup=main_kb(uid), parse_mode='Markdown')
@@ -202,7 +208,8 @@ async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("cnf_"):
         key = data.replace("cnf_", "")
         coll = get_collection()
-        if coll:
+        # FIXED: Explicit check is not None
+        if coll is not None:
             coll.update_one({"_id": uid}, {"$unset": {f"targets.{key}": ""}})
             await query.edit_message_text("✅ **Deleted.**")
     elif data == "no":
@@ -234,11 +241,9 @@ def main():
     if not BOT_TOKEN: return
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
-    # ADD HANDLER (Combines Text Command AND WebApp Data)
     app.add_handler(ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^(➕|Add)"), add_start),
-            # THIS IS THE FIX: Listen for data from the Mini App
             MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data)
         ],
         states={
@@ -248,7 +253,6 @@ def main():
         fallbacks=[MessageHandler(filters.ALL, receive_title)]
     ))
     
-    # SUPPORT HANDLER
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(📞|Contact)"), support_start)],
         states={SUPPORT_MSG: [MessageHandler(filters.TEXT, support_receive)]},
