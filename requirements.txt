@@ -3,4 +3,3 @@ flask
 pymongo
 certifi
 jdatetime
-tenacity

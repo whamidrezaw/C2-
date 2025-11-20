@@ -27,12 +27,13 @@
             color: var(--tg-theme-text-color, var(--text-primary));
             font-family: 'Inter', sans-serif;
             margin: 0; padding: 20px;
-            padding-bottom: 100px; /* Space for bottom buttons */
+            padding-bottom: 100px; 
+            transition: background-color 0.3s ease;
         }
 
         .container { max-width: 500px; margin: 0 auto; }
 
-        /* Clock */
+        /* Header */
         .header-card {
             background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white; padding: 24px; border-radius: 24px;
@@ -42,7 +43,7 @@
         .clock { font-size: 2.8rem; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
         .date-display { font-size: 0.95rem; opacity: 0.9; margin-top: 4px; }
 
-        /* Event Card */
+        /* Cards */
         .card {
             background: var(--tg-theme-bg-color, var(--card-bg));
             border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
@@ -51,7 +52,8 @@
         }
         .card-info { flex-grow: 1; margin-left: 12px; }
         .card-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 4px; }
-        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 6px; }
+        .card-dates { display: flex; flex-direction: column; gap: 2px; }
+        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
         .date-tag { font-size: 0.7rem; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
         
         .badge {
@@ -68,7 +70,7 @@
 
         .empty-state { text-align: center; padding: 40px 0; opacity: 0.5; }
 
-        /* Bottom Action Bar */
+        /* Bottom Bar */
         .bottom-bar {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             width: 90%; max-width: 480px;
@@ -84,7 +86,6 @@
         .btn-add { background-color: var(--blue); color: white; }
         .btn-del { background-color: var(--card-bg); color: var(--red); border: 2px solid #f3f4f6; }
 
-        /* Quotes */
         .quote-box {
             text-align: center; margin-top: 20px; padding: 15px;
             font-style: italic; font-size: 0.9rem; color: var(--text-secondary);
@@ -99,7 +100,9 @@
         <div class="clock" id="clock">00:00</div>
         <div class="date-display" id="date-display">Loading...</div>
     </div>
+    
     <div id="list"></div>
+    
     <div class="quote-box" id="quote"></div>
 </div>
 
@@ -113,26 +116,15 @@
 </div>
 
 <script>
+    // 1. Initialize Telegram
     const tg = window.Telegram.WebApp;
     tg.expand();
-    
+
+    // 2. Load Data from Python
+    // Safe parsing: if user_data is empty, it becomes an empty object
     const userData = {{ user_data | tojson }};
 
-    // 20 Motivational Quotes
-    const quotes = [
-        "Your time is now.", "Don't watch the clock; do what it does. Keep going.", 
-        "The future depends on what you do today.", "Believe you can and you're halfway there.",
-        "Don't count the days, make the days count.", "Success is the sum of small efforts.",
-        "Dream big, start small, but most of all, start.", "Action is the foundational key to all success.",
-        "It always seems impossible until it's done.", "Stay hungry, stay foolish.",
-        "Don't stop when you're tired. Stop when you're done.", "Focus on being productive instead of busy.",
-        "Your limitation—it's only your imagination.", "Push yourself, because no one else is going to do it for you.",
-        "Great things never came from comfort zones.", "Dream it. Wish it. Do it.",
-        "Success doesn't just find you. You have to go out and get it.", "The harder you work for something, the greater you'll feel when you achieve it.",
-        "Dream bigger. Do bigger.", "Don't wait for opportunity. Create it."
-    ];
-    document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
-
+    // 3. Clock Logic
     function updateClock() {
         const now = new Date();
         document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
@@ -141,34 +133,42 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Send Action to Bot
+    // 4. Send Action to Bot
     function sendAction(action) {
-        // This sends data back to the bot and closes the Mini App
+        // Sends "add" or "delete" to the Python function handle_webapp_data
         tg.sendData(action); 
     }
 
+    // 5. Render List
     const listDiv = document.getElementById('list');
     
-    if (Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div class="empty-state">List is empty.</div>`;
+    if (!userData || Object.keys(userData).length === 0) {
+        listDiv.innerHTML = `<div class="empty-state">No events yet.<br>Tap "Add Event" below.</div>`;
     } else {
         const events = Object.entries(userData).map(([key, item]) => {
-            const parts = item.date.split('.'); 
-            const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-            const today = new Date(); today.setHours(0,0,0,0);
-            const diff = Math.ceil((target - today) / (86400000));
-            return { ...item, key, diff };
+            // Safe Date Parsing
+            try {
+                const parts = item.date.split('.'); 
+                const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                const today = new Date(); today.setHours(0,0,0,0);
+                const diff = Math.ceil((target - today) / (86400000));
+                return { ...item, key, diff };
+            } catch(e) {
+                return { ...item, key, diff: 0 }; // Fallback for bad dates
+            }
         }).sort((a, b) => a.diff - b.diff);
 
         let html = '';
         events.forEach(item => {
             let badgeClass = 'bg-gray', txt = Math.abs(item.diff), sub = 'Days Left';
-            if (item.diff < 0) { sub = 'Days Ago'; }
+            
+            if (item.diff < 0) { sub = 'Days Ago'; badgeClass = 'bg-gray'; }
             else if (item.diff === 0) { badgeClass = 'bg-red'; txt = "Today"; sub = "Now!"; }
-            else if (item.diff <= 180) badgeClass = 'bg-red';
-            else if (item.diff <= 365) badgeClass = 'bg-yellow';
+            else if (item.diff <= 30) badgeClass = 'bg-red';
+            else if (item.diff <= 180) badgeClass = 'bg-yellow';
             else badgeClass = 'bg-green';
 
+            // Only show Shamsi if it exists
             const shamsi = item.shamsi_date ? `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
 
             html += `
@@ -187,11 +187,23 @@
         listDiv.innerHTML = html;
     }
 
-    if (tg.themeParams.bg_color) {
-        document.documentElement.style.setProperty('--bg-color', tg.themeParams.secondary_bg_color);
-        document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
-        document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
+    // 6. Theming (Auto-detect Dark/Light)
+    if (tg.themeParams) {
+        const r = document.documentElement.style;
+        const p = tg.themeParams;
+        if (p.bg_color) r.setProperty('--bg-color', p.secondary_bg_color);
+        if (p.secondary_bg_color) r.setProperty('--card-bg', p.bg_color);
+        if (p.text_color) r.setProperty('--text-primary', p.text_color);
+        if (p.hint_color) r.setProperty('--text-secondary', p.hint_color);
+        if (p.button_color) r.setProperty('--blue', p.button_color);
     }
+
+    // 7. Random Quote
+    const quotes = [
+        "Your time is now.", "Action is the key to success.", 
+        "Make today count.", "Focus on being productive."
+    ];
+    document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 </script>
 </body>
 </html>
