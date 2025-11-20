@@ -8,202 +8,100 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #f3f4f6;
-            --card-bg: #ffffff;
-            --text-primary: #1f2937;
-            --text-secondary: #6b7280;
-            --red: #ef4444;
-            --yellow: #f59e0b;
-            --green: #10b981;
-            --gray: #9ca3af;
-            --blue: #3b82f6;
-            --radius: 16px;
+            --bg-color: #f3f4f6; --card-bg: #ffffff; --text-primary: #1f2937; --text-secondary: #6b7280;
+            --red: #ef4444; --yellow: #f59e0b; --green: #10b981; --gray: #9ca3af; --blue: #3b82f6;
         }
-        
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        
-        body {
-            background-color: var(--tg-theme-secondary-bg-color, var(--bg-color));
-            color: var(--tg-theme-text-color, var(--text-primary));
-            font-family: 'Inter', sans-serif;
-            margin: 0; padding: 20px;
-            padding-bottom: 100px; 
-            transition: background-color 0.3s ease;
-        }
-
+        body { background: var(--tg-theme-secondary-bg-color, var(--bg-color)); color: var(--tg-theme-text-color, var(--text-primary)); font-family: 'Inter', sans-serif; margin: 0; padding: 20px; padding-bottom: 80px; }
         .container { max-width: 500px; margin: 0 auto; }
-
-        /* Header */
-        .header-card {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            color: white; padding: 24px; border-radius: 24px;
-            text-align: center; margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
-        }
-        .clock { font-size: 2.8rem; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-        .date-display { font-size: 0.95rem; opacity: 0.9; margin-top: 4px; }
-
-        /* Cards */
-        .card {
-            background: var(--tg-theme-bg-color, var(--card-bg));
-            border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            display: flex; align-items: center; justify-content: space-between;
-        }
+        .header-card { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 24px; border-radius: 24px; text-align: center; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
+        .clock { font-size: 2.5rem; font-weight: 700; }
+        .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; }
         .card-info { flex-grow: 1; margin-left: 12px; }
-        .card-title { font-weight: 600; font-size: 1.05rem; margin-bottom: 4px; }
-        .card-dates { display: flex; flex-direction: column; gap: 2px; }
-        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
-        .date-tag { font-size: 0.7rem; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+        .card-title { font-weight: 600; font-size: 1.05rem; }
+        .date-row { font-size: 0.85rem; color: var(--text-secondary); margin-top: 2px; }
+        .badge { padding: 8px 12px; border-radius: 12px; color: white; font-weight: bold; font-size: 0.9rem; min-width: 70px; text-align: center; }
+        .bg-red { background: var(--red); } .bg-yellow { background: var(--yellow); } .bg-green { background: var(--green); } .bg-gray { background: var(--gray); }
         
-        .badge {
-            padding: 8px 0; border-radius: 12px; font-size: 0.9rem; font-weight: 700;
-            text-align: center; min-width: 80px; color: white;
-            display: flex; flex-direction: column;
-        }
-        .badge span { font-size: 0.65rem; font-weight: 400; opacity: 0.95; }
-        
-        .bg-red { background-color: var(--red); }
-        .bg-yellow { background-color: var(--yellow); color: white; }
-        .bg-green { background-color: var(--green); }
-        .bg-gray { background-color: var(--gray); }
-
-        .empty-state { text-align: center; padding: 40px 0; opacity: 0.5; }
-
-        /* Bottom Bar */
-        .bottom-bar {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            width: 90%; max-width: 480px;
-            display: flex; gap: 10px; z-index: 100;
-        }
-        .action-btn {
-            flex: 1; padding: 14px; border: none; border-radius: 14px;
-            font-weight: 600; font-size: 1rem; cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
+        /* BOTTOM BUTTONS RESTORED */
+        .bottom-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 480px; display: flex; gap: 10px; z-index: 100; }
+        .action-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .action-btn:active { transform: scale(0.96); }
         .btn-add { background-color: var(--blue); color: white; }
         .btn-del { background-color: var(--card-bg); color: var(--red); border: 2px solid #f3f4f6; }
-
-        .quote-box {
-            text-align: center; margin-top: 20px; padding: 15px;
-            font-style: italic; font-size: 0.9rem; color: var(--text-secondary);
-            background: rgba(0,0,0,0.03); border-radius: 12px;
-        }
     </style>
 </head>
 <body>
-
 <div class="container">
     <div class="header-card">
         <div class="clock" id="clock">00:00</div>
-        <div class="date-display" id="date-display">Loading...</div>
+        <div id="date-display">Loading...</div>
     </div>
-    
     <div id="list"></div>
-    
-    <div class="quote-box" id="quote"></div>
 </div>
 
 <div class="bottom-bar">
-    <button class="action-btn btn-del" onclick="sendAction('delete')">
-        🗑 Delete
-    </button>
-    <button class="action-btn btn-add" onclick="sendAction('add')">
-        ➕ Add Event
-    </button>
+    <button class="action-btn btn-del" onclick="sendAction('delete')">🗑 Delete</button>
+    <button class="action-btn btn-add" onclick="sendAction('add')">➕ Add Event</button>
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
+    const tg = window.Telegram.WebApp; tg.expand();
     const userData = {{ user_data | tojson }};
 
     function updateClock() {
         const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
-        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+        document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+        document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
     }
-    setInterval(updateClock, 1000);
-    updateClock();
+    setInterval(updateClock, 1000); updateClock();
 
+    // CRITICAL: This function sends data to Python
     function sendAction(action) {
         tg.sendData(action); 
     }
 
     const listDiv = document.getElementById('list');
-    
     if (!userData || Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div class="empty-state">No events yet.<br>Tap "Add Event" below.</div>`;
+        listDiv.innerHTML = `<div style="text-align:center; padding:40px; opacity:0.5;">No events found.<br>Tap "Add Event" below.</div>`;
     } else {
         const events = Object.entries(userData).map(([key, item]) => {
             try {
                 const parts = item.date.split('.'); 
                 const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
                 const today = new Date(); today.setHours(0,0,0,0);
-                const diff = Math.ceil((target - today) / (86400000));
-                return { ...item, key, diff };
-            } catch(e) {
-                return { ...item, key, diff: 0 }; 
-            }
+                const diff = Math.ceil((target - today) / 86400000);
+                return { ...item, diff };
+            } catch { return { ...item, diff: 0 }; }
         }).sort((a, b) => a.diff - b.diff);
 
         let html = '';
         events.forEach(item => {
-            let badgeClass = 'bg-gray', txt = Math.abs(item.diff), sub = 'Days Left';
-            
-            if (item.diff < 0) { 
-                sub = 'Days Ago'; 
-                badgeClass = 'bg-gray'; 
-            }
-            else if (item.diff === 0) { 
-                badgeClass = 'bg-red'; 
-                txt = "Today"; 
-                sub = "Now!"; 
-            }
-            // UPDATED COLOR LOGIC HERE
-            else if (item.diff < 180) { 
-                badgeClass = 'bg-red'; // Less than 6 months
-            }
-            else if (item.diff <= 365) { 
-                badgeClass = 'bg-yellow'; // 6 to 12 months
-            }
-            else { 
-                badgeClass = 'bg-green'; // More than a year
-            }
+            let cls = 'bg-green';
+            if (item.diff < 0) cls = 'bg-gray';
+            else if (item.diff < 180) cls = 'bg-red';
+            else if (item.diff <= 365) cls = 'bg-yellow';
 
-            const shamsi = item.shamsi_date ? `<div class="date-row"><span class="date-tag">IR</span> <span class="date-val">${item.shamsi_date}</span></div>` : '';
+            const shamsi = item.shamsi_date ? ` | IR: ${item.shamsi_date}` : '';
+            const txt = item.diff < 0 ? "Done" : item.diff + " Days";
 
             html += `
             <div class="card">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
                     <div class="card-title">${item.title}</div>
-                    <div class="card-dates">
-                        <div class="date-row"><span class="date-tag">EN</span> <span class="date-val">${item.date}</span></div>
-                        ${shamsi}
-                    </div>
+                    <div class="date-row">${item.date}${shamsi}</div>
                 </div>
-                <div class="badge ${badgeClass}">${txt}<span>${sub}</span></div>
+                <div class="badge ${cls}">${txt}</div>
             </div>`;
         });
         listDiv.innerHTML = html;
     }
-
-    if (tg.themeParams) {
-        const r = document.documentElement.style;
-        const p = tg.themeParams;
-        if (p.bg_color) r.setProperty('--bg-color', p.secondary_bg_color);
-        if (p.secondary_bg_color) r.setProperty('--card-bg', p.bg_color);
-        if (p.text_color) r.setProperty('--text-primary', p.text_color);
-        if (p.hint_color) r.setProperty('--text-secondary', p.hint_color);
-        if (p.button_color) r.setProperty('--blue', p.button_color);
+    
+    if (tg.themeParams.bg_color) {
+        document.body.style.background = tg.themeParams.secondary_bg_color;
+        document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
+        document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
     }
-
-    const quotes = ["Make it happen.", "Stay focused.", "Time is precious.", "Keep moving forward."];
-    document.getElementById('quote').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 </script>
 </body>
 </html>
