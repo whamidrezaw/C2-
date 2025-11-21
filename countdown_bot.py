@@ -2,7 +2,6 @@ import logging
 import threading
 import os
 import uuid
-# Added 'time' for scheduling
 from datetime import datetime, time
 import jdatetime
 import certifi
@@ -82,7 +81,6 @@ def webapp(user_id):
         return render_template('index.html', user_data=targets, user_id=str(user_id))
     except: return "Error", 500
 
-# --- API ROUTES ---
 @app.route('/api/add/<user_id>', methods=['POST'])
 def add_event_api(user_id):
     try:
@@ -122,38 +120,24 @@ def main_kb(uid):
         [KeyboardButton("📞 Contact Support")]
     ], resize_keyboard=True)
 
-# --- NOTIFICATION JOB ---
+# --- NOTIFICATIONS ---
 async def daily_notification_check(context: ContextTypes.DEFAULT_TYPE):
-    """Runs daily to check for due events."""
-    logger.info("🔔 Running Daily Notification Check...")
     coll = get_collection()
     if coll is None: return
-
     users = coll.find({})
     today = datetime.now().date()
-
     for user in users:
         uid = user['_id']
         targets = user.get('targets', {})
-        
         for key, item in targets.items():
             try:
                 event_date = datetime.strptime(item['date'], "%d.%m.%Y").date()
                 days_left = (event_date - today).days
-                
                 msg = ""
-                if days_left == 1:
-                    msg = f"🔔 **Reminder:**\n\nYour event **'{item['title']}'** is Tomorrow! ⏳"
-                elif days_left == 0:
-                    msg = f"🚨 **TODAY IS THE DAY!**\n\n**'{item['title']}'** is happening today! 🎉"
-                
-                if msg:
-                    try:
-                        await context.bot.send_message(chat_id=uid, text=msg, parse_mode='Markdown')
-                        logger.info(f"Sent notification to {uid}")
-                    except Exception as e:
-                        logger.error(f"Failed to send to {uid}: {e}")
-            except Exception: continue
+                if days_left == 1: msg = f"🔔 **Reminder:**\n'{item['title']}' is Tomorrow! ⏳"
+                elif days_left == 0: msg = f"🚨 **TODAY:**\n'{item['title']}' is happening! 🎉"
+                if msg: await context.bot.send_message(chat_id=uid, text=msg, parse_mode='Markdown')
+            except: continue
 
 # --- HANDLERS ---
 GET_TITLE, GET_DATE = range(2)
@@ -164,18 +148,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     coll = get_collection()
     if coll is not None: coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
     
-    # --- NEW IMPROVED WELCOME MESSAGE ---
     welcome_text = (
         f"👋 **Hello, {update.effective_user.first_name}!**\n\n"
         "Welcome to **Time Manager**, your personal assistant for tracking life's important moments.\n\n"
-        "✨ **What I can do for you:**\n"
-        "📅 **Visual Timeline:** View all your events in a beautiful Mini App.\n"
-        "⏳ **Smart Countdowns:** I calculate the exact days left for every event.\n"
-        "🔔 **Auto-Notifications:** I will notify you **1 day before** and **on the day** of the event.\n"
-        "🌍 **Date Support:** I understand both **Gregorian (Miladi)** and **Solar (Shamsi)** dates.\n\n"
-        "🚀 **Getting Started:**\n"
-        "Click **'➕ Add Event'** to set your first goal, or open the **Mini App** to see the magic!\n\n"
-        "👇 **Choose an option:**"
+        "✨ **Capabilities:**\n"
+        "📅 **Visual App:** Manage events visually.\n"
+        "⏳ **Countdowns:** Smart day counters.\n"
+        "🔔 **Notifications:** Alerts 1 day before & on the day.\n"
+        "🌍 **Dates:** Gregorian & Solar (Shamsi) support.\n\n"
+        "👇 **Select an option to begin:**"
     )
     await update.message.reply_text(welcome_text, reply_markup=main_kb(uid), parse_mode='Markdown')
 
@@ -184,13 +165,12 @@ async def post_init(application: Application):
         try: await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE)))
         except: pass
 
-# --- ADD/DELETE/SUPPORT HANDLERS ---
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
     return GET_TITLE
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text in ["❌ Cancel", "📱 Open App", "➕ Add Event", "🗑 Delete Event"]:
+    if update.message.text in ["❌ Cancel", "📱 Open App", "➕ Add Event", "🗑 Delete Event", "📞 Contact Support"]:
         await update.message.reply_text("❌ Cancelled.", reply_markup=main_kb(update.effective_user.id))
         return ConversationHandler.END
     context.user_data['title'] = update.message.text
@@ -263,16 +243,20 @@ async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Sent.")
     except: pass
 
+# --- INPUT GUARD (CATCH ALL) ---
+async def ignore_random_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catches any input that is NOT a command and NOT inside a conversation."""
+    await update.message.reply_text(
+        "⛔ **I didn't understand that.**\n\nPlease select an option from the menu below.",
+        reply_markup=main_kb(update.effective_user.id),
+        parse_mode='Markdown'
+    )
+
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
     if not BOT_TOKEN: return
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-    
-    # --- SETUP NOTIFICATION JOB ---
-    # Runs every day at 08:00 AM UTC
-    if app.job_queue:
-        app.job_queue.run_daily(daily_notification_check, time=time(hour=8, minute=0))
-        print("⏰ Notification System Started (08:00 UTC Daily)")
+    if app.job_queue: app.job_queue.run_daily(daily_notification_check, time=time(hour=8, minute=0))
 
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(➕|Add)"), add_start)],
@@ -288,6 +272,10 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reply", admin_reply))
     app.add_handler(CallbackQueryHandler(delete_callback))
+    
+    # --- CATCH ALL HANDLER (Must be last) ---
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, ignore_random_input))
+    
     print("✅ Bot Running...")
     app.run_polling(drop_pending_updates=True)
 

@@ -13,13 +13,17 @@
         }
         body { background: var(--tg-theme-secondary-bg-color, var(--bg-color)); color: var(--tg-theme-text-color, var(--text-primary)); font-family: 'Inter', sans-serif; margin: 0; padding: 20px; padding-bottom: 80px; }
         .container { max-width: 500px; margin: 0 auto; }
+        
         .header-card { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 24px; border-radius: 24px; text-align: center; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
         .clock { font-size: 2.5rem; font-weight: 700; }
+        
+        /* QUOTE STYLE */
+        .quote { margin-top: 10px; font-size: 0.9rem; font-style: italic; opacity: 0.9; font-weight: 400; min-height: 20px; }
+
         .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; position: relative;}
         .card-info { flex-grow: 1; margin-left: 12px; }
         .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
         
-        /* NEW DATE STYLES */
         .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px; }
         .date-item { display: flex; align-items: center; gap: 6px; }
         .date-label { font-size: 0.75rem; opacity: 0.7; font-weight: 600; min-width: 45px; }
@@ -42,6 +46,7 @@
     <div class="header-card">
         <div class="clock" id="clock">00:00</div>
         <div id="date-display">Loading...</div>
+        <div class="quote" id="quote-display"></div>
     </div>
     <div id="list"></div>
 </div>
@@ -56,6 +61,17 @@
     const userData = {{ user_data | tojson }};
     const userID = "{{ user_id }}"; 
     let isDeleteMode = false;
+
+    // --- MOTIVATIONAL QUOTES (20 Short Ones) ---
+    const quotes = [
+        "Make it happen.", "Seize the day.", "Time is gold.", "Stay focused.",
+        "Dream big.", "Keep going.", "You can do it.", "Believe in yourself.",
+        "Action wins.", "No excuses.", "Create the future.", "Stay hungry.",
+        "Work hard.", "Shine bright.", "Trust the process.", "One step a day.",
+        "Focus on today.", "Be productive.", "Never give up.", "Your time is now."
+    ];
+    // Pick random
+    document.getElementById('quote-display').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 
     function updateClock() {
         const now = new Date();
@@ -130,8 +146,6 @@
             else if (item.diff <= 365) cls = 'bg-yellow';
 
             const txt = item.diff < 0 ? "Done" : item.diff + " Days";
-            
-            // NEW DATE DISPLAY LOGIC
             const shamsiPart = item.shamsi_date ? 
                 `<div class="date-item"><span class="date-label">☀️ IR:</span> ${item.shamsi_date}</div>` : '';
 
