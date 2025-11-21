@@ -87,11 +87,10 @@ def webapp(user_id):
                 j_date = jdatetime.date.fromgregorian(date=g_date.date())
                 item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
             except: item['shamsi_date'] = ""
-        # PASSING user_id TO TEMPLATE IS CRITICAL FOR THE API
         return render_template('index.html', user_data=targets, user_id=str(user_id))
     except: return "Error", 500
 
-# --- NEW API ROUTES (THE FIX) ---
+# --- API ROUTES (FIXED) ---
 @app.route('/api/add/<user_id>', methods=['POST'])
 def add_event_api(user_id):
     try:
@@ -103,13 +102,17 @@ def add_event_api(user_id):
         if not formatted: return jsonify({"success": False, "error": "Invalid Date"}), 400
         
         coll = get_collection()
-        if coll:
+        
+        # FIX WAS APPLIED HERE: Explicit check 'is not None'
+        if coll is not None:
             evt_id = f"evt_{uuid.uuid4().hex[:6]}"
             new_item = {"title": title, "date": formatted}
             coll.update_one({"_id": str(user_id)}, {"$set": {f"targets.{evt_id}": new_item}}, upsert=True)
             return jsonify({"success": True})
-        return jsonify({"success": False, "error": "DB Error"}), 500
+            
+        return jsonify({"success": False, "error": "DB Connection Failed"}), 500
     except Exception as e:
+        logger.error(f"API Add Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/delete/<user_id>', methods=['POST'])
@@ -118,11 +121,15 @@ def delete_event_api(user_id):
         data = request.json
         key = data.get('key')
         coll = get_collection()
-        if coll:
+        
+        # FIX WAS APPLIED HERE: Explicit check 'is not None'
+        if coll is not None:
             coll.update_one({"_id": str(user_id)}, {"$unset": {f"targets.{key}": ""}})
             return jsonify({"success": True})
-        return jsonify({"success": False}), 500
+            
+        return jsonify({"success": False, "error": "DB Connection Failed"}), 500
     except Exception as e:
+        logger.error(f"API Delete Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 def run_flask():
@@ -157,7 +164,7 @@ async def post_init(application: Application):
         try: await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE)))
         except: pass
 
-# --- WEB APP BRIDGE (Kept for legacy support) ---
+# --- LEGACY WEB APP BRIDGE (Optional, but kept for safety) ---
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.effective_message.web_app_data.data
     if data == "add":
