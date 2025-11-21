@@ -15,19 +15,21 @@
         .container { max-width: 500px; margin: 0 auto; }
         .header-card { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 24px; border-radius: 24px; text-align: center; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
         .clock { font-size: 2.5rem; font-weight: 700; }
-        .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; }
+        .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; position: relative;}
         .card-info { flex-grow: 1; margin-left: 12px; }
         .card-title { font-weight: 600; font-size: 1.05rem; }
         .date-row { font-size: 0.85rem; color: var(--text-secondary); margin-top: 2px; }
         .badge { padding: 8px 12px; border-radius: 12px; color: white; font-weight: bold; font-size: 0.9rem; min-width: 70px; text-align: center; }
         .bg-red { background: var(--red); } .bg-yellow { background: var(--yellow); } .bg-green { background: var(--green); } .bg-gray { background: var(--gray); }
         
-        /* BOTTOM BUTTONS RESTORED */
         .bottom-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 480px; display: flex; gap: 10px; z-index: 100; }
         .action-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .action-btn:active { transform: scale(0.96); }
         .btn-add { background-color: var(--blue); color: white; }
         .btn-del { background-color: var(--card-bg); color: var(--red); border: 2px solid #f3f4f6; }
+
+        .del-overlay { display: none; position: absolute; right: 10px; top: 10px; bottom: 10px; width: 40px; background: #ffebee; color: red; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .delete-mode .del-overlay { display: flex; }
     </style>
 </head>
 <body>
@@ -40,13 +42,16 @@
 </div>
 
 <div class="bottom-bar">
-    <button class="action-btn btn-del" onclick="sendAction('delete')">🗑 Delete</button>
-    <button class="action-btn btn-add" onclick="sendAction('add')">➕ Add Event</button>
+    <button class="action-btn btn-del" onclick="toggleDeleteMode()">🗑 Delete</button>
+    <button class="action-btn btn-add" onclick="triggerAdd()">➕ Add Event</button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp; tg.expand();
     const userData = {{ user_data | tojson }};
+    // We get the User ID from Flask now!
+    const userID = "{{ user_id }}"; 
+    let isDeleteMode = false;
 
     function updateClock() {
         const now = new Date();
@@ -55,14 +60,64 @@
     }
     setInterval(updateClock, 1000); updateClock();
 
-    // CRITICAL: This function sends data to Python
-    function sendAction(action) {
-        tg.sendData(action); 
+    // --- 1. API: ADD EVENT ---
+    async function triggerAdd() {
+        // Simple prompts to keep users inside the App (Menu Button Friendly)
+        const title = prompt("Enter Event Name:");
+        if (!title) return;
+        
+        const date = prompt("Enter Date (YYYY.MM.DD or 1403.MM.DD):");
+        if (!date) return;
+
+        tg.MainButton.showProgress();
+        try {
+            const res = await fetch(`/api/add/${userID}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ title, date })
+            });
+            const json = await res.json();
+            if (json.success) {
+                window.location.reload(); // Refresh to show new event
+            } else {
+                alert("Error: " + json.error);
+            }
+        } catch (e) {
+            alert("Connection Failed");
+        }
+        tg.MainButton.hideProgress();
+    }
+
+    // --- 2. API: DELETE EVENT ---
+    function toggleDeleteMode() {
+        isDeleteMode = !isDeleteMode;
+        const list = document.getElementById('list');
+        if (isDeleteMode) {
+            list.classList.add('delete-mode');
+            tg.HapticFeedback.notificationOccurred('warning');
+        } else {
+            list.classList.remove('delete-mode');
+        }
+    }
+
+    async function deleteEvent(key, title) {
+        if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
+        
+        tg.MainButton.showProgress();
+        try {
+            const res = await fetch(`/api/delete/${userID}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ key })
+            });
+            if (res.ok) window.location.reload();
+        } catch (e) { alert("Failed"); }
+        tg.MainButton.hideProgress();
     }
 
     const listDiv = document.getElementById('list');
     if (!userData || Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div style="text-align:center; padding:40px; opacity:0.5;">No events found.<br>Tap "Add Event" below.</div>`;
+        listDiv.innerHTML = `<div style="text-align:center; padding:40px; opacity:0.5;">No events.<br>Tap "Add Event".</div>`;
     } else {
         const events = Object.entries(userData).map(([key, item]) => {
             try {
@@ -70,8 +125,8 @@
                 const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
                 const today = new Date(); today.setHours(0,0,0,0);
                 const diff = Math.ceil((target - today) / 86400000);
-                return { ...item, diff };
-            } catch { return { ...item, diff: 0 }; }
+                return { ...item, key, diff };
+            } catch { return { ...item, key, diff: 0 }; }
         }).sort((a, b) => a.diff - b.diff);
 
         let html = '';
@@ -85,13 +140,14 @@
             const txt = item.diff < 0 ? "Done" : item.diff + " Days";
 
             html += `
-            <div class="card">
+            <div class="card" onclick="if(isDeleteMode) deleteEvent('${item.key}', '${item.title}')">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
                     <div class="card-title">${item.title}</div>
                     <div class="date-row">${item.date}${shamsi}</div>
                 </div>
                 <div class="badge ${cls}">${txt}</div>
+                <div class="del-overlay">🗑</div>
             </div>`;
         });
         listDiv.innerHTML = html;
