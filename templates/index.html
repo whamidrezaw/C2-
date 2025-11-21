@@ -17,8 +17,13 @@
         .clock { font-size: 2.5rem; font-weight: 700; }
         .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; position: relative;}
         .card-info { flex-grow: 1; margin-left: 12px; }
-        .card-title { font-weight: 600; font-size: 1.05rem; }
-        .date-row { font-size: 0.85rem; color: var(--text-secondary); margin-top: 2px; }
+        .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
+        
+        /* NEW DATE STYLES */
+        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px; }
+        .date-item { display: flex; align-items: center; gap: 6px; }
+        .date-label { font-size: 0.75rem; opacity: 0.7; font-weight: 600; min-width: 45px; }
+        
         .badge { padding: 8px 12px; border-radius: 12px; color: white; font-weight: bold; font-size: 0.9rem; min-width: 70px; text-align: center; }
         .bg-red { background: var(--red); } .bg-yellow { background: var(--yellow); } .bg-green { background: var(--green); } .bg-gray { background: var(--gray); }
         
@@ -49,7 +54,6 @@
 <script>
     const tg = window.Telegram.WebApp; tg.expand();
     const userData = {{ user_data | tojson }};
-    // We get the User ID from Flask now!
     const userID = "{{ user_id }}"; 
     let isDeleteMode = false;
 
@@ -60,15 +64,11 @@
     }
     setInterval(updateClock, 1000); updateClock();
 
-    // --- 1. API: ADD EVENT ---
     async function triggerAdd() {
-        // Simple prompts to keep users inside the App (Menu Button Friendly)
         const title = prompt("Enter Event Name:");
         if (!title) return;
-        
         const date = prompt("Enter Date (YYYY.MM.DD or 1403.MM.DD):");
         if (!date) return;
-
         tg.MainButton.showProgress();
         try {
             const res = await fetch(`/api/add/${userID}`, {
@@ -77,18 +77,12 @@
                 body: JSON.stringify({ title, date })
             });
             const json = await res.json();
-            if (json.success) {
-                window.location.reload(); // Refresh to show new event
-            } else {
-                alert("Error: " + json.error);
-            }
-        } catch (e) {
-            alert("Connection Failed");
-        }
+            if (json.success) window.location.reload();
+            else alert("Error: " + json.error);
+        } catch (e) { alert("Connection Failed"); }
         tg.MainButton.hideProgress();
     }
 
-    // --- 2. API: DELETE EVENT ---
     function toggleDeleteMode() {
         isDeleteMode = !isDeleteMode;
         const list = document.getElementById('list');
@@ -101,8 +95,7 @@
     }
 
     async function deleteEvent(key, title) {
-        if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
-        
+        if (!confirm(`Delete "${title}"?`)) return;
         tg.MainButton.showProgress();
         try {
             const res = await fetch(`/api/delete/${userID}`, {
@@ -136,15 +129,21 @@
             else if (item.diff < 180) cls = 'bg-red';
             else if (item.diff <= 365) cls = 'bg-yellow';
 
-            const shamsi = item.shamsi_date ? ` | IR: ${item.shamsi_date}` : '';
             const txt = item.diff < 0 ? "Done" : item.diff + " Days";
+            
+            // NEW DATE DISPLAY LOGIC
+            const shamsiPart = item.shamsi_date ? 
+                `<div class="date-item"><span class="date-label">☀️ IR:</span> ${item.shamsi_date}</div>` : '';
 
             html += `
             <div class="card" onclick="if(isDeleteMode) deleteEvent('${item.key}', '${item.title}')">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
                     <div class="card-title">${item.title}</div>
-                    <div class="date-row">${item.date}${shamsi}</div>
+                    <div class="date-row">
+                        <div class="date-item"><span class="date-label">📅 EN:</span> ${item.date}</div>
+                        ${shamsiPart}
+                    </div>
                 </div>
                 <div class="badge ${cls}">${txt}</div>
                 <div class="del-overlay">🗑</div>

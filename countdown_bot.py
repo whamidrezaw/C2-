@@ -2,10 +2,10 @@ import logging
 import threading
 import os
 import uuid
-from datetime import datetime
+# Added 'time' for scheduling
+from datetime import datetime, time
 import jdatetime
 import certifi
-# Added 'request' and 'jsonify' for the API
 from flask import Flask, render_template, request, jsonify
 from pymongo import MongoClient
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonWebApp
@@ -62,17 +62,9 @@ def parse_date(text):
 # --- FLASK ROUTES ---
 @app.route('/')
 def home():
-    return """
-    <html><head><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
+    return """<html><head><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
     <body style="background:#f4f6f8;font-family:sans-serif;text-align:center;padding-top:50px;">
-        <script>
-            const tg = window.Telegram.WebApp; tg.ready();
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                window.location.href = "/webapp/" + tg.initDataUnsafe.user.id;
-            } else { document.write("Please open in Telegram"); }
-        </script>
-    </body></html>
-    """
+    <script>const tg=window.Telegram.WebApp;tg.ready();if(tg.initDataUnsafe&&tg.initDataUnsafe.user){window.location.href="/webapp/"+tg.initDataUnsafe.user.id;}else{document.write("Open in Telegram");}</script></body></html>"""
 
 @app.route('/webapp/<user_id>')
 def webapp(user_id):
@@ -90,47 +82,32 @@ def webapp(user_id):
         return render_template('index.html', user_data=targets, user_id=str(user_id))
     except: return "Error", 500
 
-# --- API ROUTES (FIXED) ---
+# --- API ROUTES ---
 @app.route('/api/add/<user_id>', methods=['POST'])
 def add_event_api(user_id):
     try:
         data = request.json
-        title = data.get('title')
-        date_str = data.get('date')
-        formatted = parse_date(date_str)
-        
+        formatted = parse_date(data.get('date'))
         if not formatted: return jsonify({"success": False, "error": "Invalid Date"}), 400
-        
         coll = get_collection()
-        
-        # FIX WAS APPLIED HERE: Explicit check 'is not None'
         if coll is not None:
             evt_id = f"evt_{uuid.uuid4().hex[:6]}"
-            new_item = {"title": title, "date": formatted}
+            new_item = {"title": data.get('title'), "date": formatted}
             coll.update_one({"_id": str(user_id)}, {"$set": {f"targets.{evt_id}": new_item}}, upsert=True)
             return jsonify({"success": True})
-            
-        return jsonify({"success": False, "error": "DB Connection Failed"}), 500
-    except Exception as e:
-        logger.error(f"API Add Error: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False}), 500
+    except Exception as e: return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/delete/<user_id>', methods=['POST'])
 def delete_event_api(user_id):
     try:
-        data = request.json
-        key = data.get('key')
+        key = request.json.get('key')
         coll = get_collection()
-        
-        # FIX WAS APPLIED HERE: Explicit check 'is not None'
         if coll is not None:
             coll.update_one({"_id": str(user_id)}, {"$unset": {f"targets.{key}": ""}})
             return jsonify({"success": True})
-            
-        return jsonify({"success": False, "error": "DB Connection Failed"}), 500
-    except Exception as e:
-        logger.error(f"API Delete Error: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False}), 500
+    except Exception as e: return jsonify({"success": False, "error": str(e)}), 500
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -145,63 +122,92 @@ def main_kb(uid):
         [KeyboardButton("📞 Contact Support")]
     ], resize_keyboard=True)
 
-# --- BOT HANDLERS ---
+# --- NOTIFICATION JOB ---
+async def daily_notification_check(context: ContextTypes.DEFAULT_TYPE):
+    """Runs daily to check for due events."""
+    logger.info("🔔 Running Daily Notification Check...")
+    coll = get_collection()
+    if coll is None: return
+
+    users = coll.find({})
+    today = datetime.now().date()
+
+    for user in users:
+        uid = user['_id']
+        targets = user.get('targets', {})
+        
+        for key, item in targets.items():
+            try:
+                event_date = datetime.strptime(item['date'], "%d.%m.%Y").date()
+                days_left = (event_date - today).days
+                
+                msg = ""
+                if days_left == 1:
+                    msg = f"🔔 **Reminder:**\n\nYour event **'{item['title']}'** is Tomorrow! ⏳"
+                elif days_left == 0:
+                    msg = f"🚨 **TODAY IS THE DAY!**\n\n**'{item['title']}'** is happening today! 🎉"
+                
+                if msg:
+                    try:
+                        await context.bot.send_message(chat_id=uid, text=msg, parse_mode='Markdown')
+                        logger.info(f"Sent notification to {uid}")
+                    except Exception as e:
+                        logger.error(f"Failed to send to {uid}: {e}")
+            except Exception: continue
+
+# --- HANDLERS ---
 GET_TITLE, GET_DATE = range(2)
 SUPPORT_MSG = range(1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     coll = get_collection()
-    if coll is not None: 
-        coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
-    await update.message.reply_text(
-        f"👋 **Hello {update.effective_user.first_name}!**\n\nSelect an option:",
-        reply_markup=main_kb(uid), parse_mode='Markdown'
+    if coll is not None: coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
+    
+    # --- NEW IMPROVED WELCOME MESSAGE ---
+    welcome_text = (
+        f"👋 **Hello, {update.effective_user.first_name}!**\n\n"
+        "Welcome to **Time Manager**, your personal assistant for tracking life's important moments.\n\n"
+        "✨ **What I can do for you:**\n"
+        "📅 **Visual Timeline:** View all your events in a beautiful Mini App.\n"
+        "⏳ **Smart Countdowns:** I calculate the exact days left for every event.\n"
+        "🔔 **Auto-Notifications:** I will notify you **1 day before** and **on the day** of the event.\n"
+        "🌍 **Date Support:** I understand both **Gregorian (Miladi)** and **Solar (Shamsi)** dates.\n\n"
+        "🚀 **Getting Started:**\n"
+        "Click **'➕ Add Event'** to set your first goal, or open the **Mini App** to see the magic!\n\n"
+        "👇 **Choose an option:**"
     )
+    await update.message.reply_text(welcome_text, reply_markup=main_kb(uid), parse_mode='Markdown')
 
 async def post_init(application: Application):
     if WEBAPP_URL_BASE:
         try: await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE)))
         except: pass
 
-# --- LEGACY WEB APP BRIDGE (Optional, but kept for safety) ---
-async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = update.effective_message.web_app_data.data
-    if data == "add":
-        await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
-        return GET_TITLE
-    elif data == "delete":
-        await delete_menu_logic(update, context)
-        return ConversationHandler.END
-
-# --- ADD CONVERSATION (Bot Mode) ---
+# --- ADD/DELETE/SUPPORT HANDLERS ---
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
     return GET_TITLE
 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text in ["❌ Cancel", "📱 Open App", "➕ Add Event", "🗑 Delete Event"]:
+    if update.message.text in ["❌ Cancel", "📱 Open App", "➕ Add Event", "🗑 Delete Event"]:
         await update.message.reply_text("❌ Cancelled.", reply_markup=main_kb(update.effective_user.id))
         return ConversationHandler.END
-    context.user_data['title'] = text
+    context.user_data['title'] = update.message.text
     await update.message.reply_text("📅 **Enter Date (Year.Month.Day):**", parse_mode='Markdown')
     return GET_DATE
 
 async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text == "❌ Cancel": return await cancel(update, context)
-    formatted = parse_date(text)
+    if update.message.text == "❌ Cancel": return await cancel(update, context)
+    formatted = parse_date(update.message.text)
     uid = str(update.effective_user.id)
     if formatted:
         coll = get_collection()
         if coll is not None:
             evt_id = f"evt_{uuid.uuid4().hex[:6]}"
-            new_item = {"title": context.user_data['title'], "date": formatted}
-            coll.update_one({"_id": uid}, {"$set": {f"targets.{evt_id}": new_item}}, upsert=True)
+            coll.update_one({"_id": uid}, {"$set": {f"targets.{evt_id}": {"title": context.user_data['title'], "date": formatted}}}, upsert=True)
             await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
-        else:
-            await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
+        else: await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
         return ConversationHandler.END
     else:
         await update.message.reply_text("❌ **Invalid Date.** Try again:", parse_mode='Markdown')
@@ -211,23 +217,15 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Cancelled.", reply_markup=main_kb(update.effective_user.id))
     return ConversationHandler.END
 
-# --- DELETE LOGIC (Bot Mode) ---
-async def delete_menu_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await delete_menu_logic(update, context)
-
-async def delete_menu_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     coll = get_collection()
-    if coll is not None:
-        user_doc = coll.find_one({"_id": uid})
-        targets = user_doc.get('targets', {}) if user_doc else {}
-    else: targets = {}
+    user_doc = coll.find_one({"_id": uid}) if coll is not None else None
+    targets = user_doc.get('targets', {}) if user_doc else {}
     if not targets:
         await update.message.reply_text("📭 **List is empty.**", reply_markup=main_kb(uid), parse_mode='Markdown')
         return
-    kb = []
-    for k, v in targets.items():
-        kb.append([InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"ask_{k}")])
+    kb = [[InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"ask_{k}")] for k, v in targets.items()]
     await update.message.reply_text("🗑 **Tap to delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
 
 async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -244,19 +242,16 @@ async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if coll is not None:
             coll.update_one({"_id": uid}, {"$unset": {f"targets.{key}": ""}})
             await query.edit_message_text("✅ **Deleted.**")
-    elif data == "no":
-        await query.delete_message()
+    elif data == "no": await query.delete_message()
 
-# --- SUPPORT ---
 async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📬 **Type your message:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
     return SUPPORT_MSG
 
 async def support_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text
-    if msg == "❌ Cancel": return await cancel(update, context)
+    if update.message.text == "❌ Cancel": return await cancel(update, context)
     if ADMIN_ID:
-        await context.bot.send_message(ADMIN_ID, f"📩 **Support:**\nID: `{update.effective_user.id}`\n\n{msg}\n\nReply: `/reply {update.effective_user.id} msg`", parse_mode='Markdown')
+        await context.bot.send_message(ADMIN_ID, f"📩 **Support:**\nID: `{update.effective_user.id}`\nMsg: {update.message.text}\n\nReply: `/reply {update.effective_user.id} msg`", parse_mode='Markdown')
         await update.message.reply_text("✅ Sent!", reply_markup=main_kb(update.effective_user.id))
     return ConversationHandler.END
 
@@ -272,15 +267,16 @@ def main():
     threading.Thread(target=run_flask, daemon=True).start()
     if not BOT_TOKEN: return
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    
+    # --- SETUP NOTIFICATION JOB ---
+    # Runs every day at 08:00 AM UTC
+    if app.job_queue:
+        app.job_queue.run_daily(daily_notification_check, time=time(hour=8, minute=0))
+        print("⏰ Notification System Started (08:00 UTC Daily)")
+
     app.add_handler(ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^(➕|Add)"), add_start),
-            MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data)
-        ],
-        states={
-            GET_TITLE: [MessageHandler(filters.TEXT, receive_title)],
-            GET_DATE: [MessageHandler(filters.TEXT, receive_date)]
-        },
+        entry_points=[MessageHandler(filters.Regex("^(➕|Add)"), add_start)],
+        states={GET_TITLE: [MessageHandler(filters.TEXT, receive_title)], GET_DATE: [MessageHandler(filters.TEXT, receive_date)]},
         fallbacks=[MessageHandler(filters.ALL, receive_title)]
     ))
     app.add_handler(ConversationHandler(
@@ -288,7 +284,7 @@ def main():
         states={SUPPORT_MSG: [MessageHandler(filters.TEXT, support_receive)]},
         fallbacks=[MessageHandler(filters.ALL, cancel)]
     ))
-    app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_menu_manual))
+    app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_menu))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reply", admin_reply))
     app.add_handler(CallbackQueryHandler(delete_callback))
