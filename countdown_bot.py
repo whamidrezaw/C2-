@@ -1,283 +1,357 @@
 import logging
-import threading
 import os
 import uuid
-from datetime import datetime, time
+import hmac
+import hashlib
+import json
+import asyncio
+import time
+import random
+from datetime import datetime
+from urllib.parse import unquote
+from typing import Dict, Any, Optional
+
 import jdatetime
 import certifi
-from flask import Flask, render_template, request, jsonify
-from pymongo import MongoClient
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonWebApp
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, validator
 
-# --- CONFIGURATION ---
-app = Flask(__name__, template_folder='templates')
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters
 
+# ==================== CONFIGURATION ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 WEBAPP_URL_BASE = os.getenv("WEBAPP_URL_BASE")
 
-try: ADMIN_ID = int(os.getenv("ADMIN_ID"))
-except: ADMIN_ID = None
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+except:
+    ADMIN_ID = None
 
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ==================== LOGGING SETUP ====================
+formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
 
-# --- DATABASE ---
-client = None
-def get_collection():
-    global client
-    if not MONGO_URI: return None
+logger = logging.getLogger("TimeManager-Pro")
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+# ==================== RATE LIMITER (MEMORY SAFE) ====================
+request_history: Dict[str, list] = {}
+
+async def rate_limit(request: Request, max_requests: int = 30, window: int = 60):
+    """Rate limiting with automatic memory cleanup"""
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    
+    # Cleanup old entries (10% probability to avoid overhead)
+    if random.randint(1, 10) == 1:
+        cutoff = now - window
+        for ip in list(request_history.keys()):
+            request_history[ip] = [t for t in request_history[ip] if t > cutoff]
+            if not request_history[ip]:
+                del request_history[ip]
+    
+    if client_ip not in request_history:
+        request_history[client_ip] = []
+    
+    # Filter old requests for this specific IP
+    request_history[client_ip] = [t for t in request_history[client_ip] if now - t < window]
+    
+    if len(request_history[client_ip]) >= max_requests:
+        logger.warning(f"Rate limit hit for IP: {client_ip}")
+        raise HTTPException(429, "Too many requests. Please slow down.")
+    
+    request_history[client_ip].append(now)
+
+# ==================== DATABASE CONNECTION ====================
+db_client: Optional[AsyncIOMotorClient] = None
+
+def get_db():
+    if db_client is None:
+        raise HTTPException(503, "Database not connected")
+    return db_client['time_manager_db']['users']
+
+# ==================== SECURITY UTILS ====================
+def validate_telegram_data(init_data: str) -> Optional[dict]:
+    """Validate Telegram WebApp data with HMAC"""
+    if not BOT_TOKEN or not init_data:
+        return None
+    
     try:
-        if client is None:
-            ca = certifi.where()
-            client = MongoClient(MONGO_URI, tls=True, tlsCAFile=ca, serverSelectionTimeoutMS=5000)
-            client.admin.command('ping')
-        return client['time_manager_db']['users']
+        parsed_data = {}
+        for pair in init_data.split('&'):
+            if '=' not in pair:
+                continue
+            key, value = pair.split('=', 1)
+            parsed_data[key] = value
+        
+        hash_check = parsed_data.pop('hash', None)
+        if not hash_check:
+            return None
+        
+        # Check timestamp (24 hours TTL)
+        auth_date = int(parsed_data.get('auth_date', 0))
+        if time.time() - auth_date > 86400:
+            logger.warning("Telegram data expired")
+            return None
+        
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items()))
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        
+        if not hmac.compare_digest(calculated_hash, hash_check):
+            return None
+        
+        if 'user' in parsed_data:
+            return json.loads(unquote(parsed_data['user']))
+        return None
+        
     except Exception as e:
-        logger.error(f"DB Error: {e}")
+        logger.error(f"Validation Error: {e}")
         return None
 
-# --- DATE PARSER ---
-def parse_date(text):
-    if not text: return None
+def parse_date(text: str) -> Optional[str]:
+    """Smart date parser (Shamsi/Gregorian)"""
+    if not text:
+        return None
+    
     text = text.replace('/', '.').replace('-', '.')
     trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
     text = text.translate(trans)
     parts = [p for p in text.split('.') if p.isdigit()]
-    if len(parts) != 3: return None
+    
+    if len(parts) != 3:
+        return None
+    
     try:
         p1, p2, p3 = int(parts[0]), int(parts[1]), int(parts[2])
-        y, m, d = 0, 0, 0
-        if p1 > 1000: y, m, d = p1, p2, p3
-        elif p3 > 1000: y, m, d = p3, p2, p1
-        else: return None
-        if y < 1500: 
+        y, m, d = (p1, p2, p3) if p1 > 1000 else (p3, p2, p1)
+        
+        if y < 1500:  # Shamsi to Gregorian
             g = jdatetime.date(y, m, d).togregorian()
             return datetime(g.year, g.month, g.day).strftime("%d.%m.%Y")
+        
         return datetime(y, m, d).strftime("%d.%m.%Y")
-    except: return None
+    except:
+        return None
 
-# --- FLASK ROUTES ---
-@app.route('/')
-def home():
-    return """<html><head><script src="https://telegram.org/js/telegram-web-app.js"></script></head>
-    <body style="background:#f4f6f8;font-family:sans-serif;text-align:center;padding-top:50px;">
-    <script>const tg=window.Telegram.WebApp;tg.ready();if(tg.initDataUnsafe&&tg.initDataUnsafe.user){window.location.href="/webapp/"+tg.initDataUnsafe.user.id;}else{document.write("Open in Telegram");}</script></body></html>"""
+# ==================== PYDANTIC MODELS ====================
+class EventModel(BaseModel):
+    initData: str = Field(..., min_length=20)
+    title: Optional[str] = Field(None, max_length=100)
+    date: Optional[str] = Field(None, max_length=15)
+    key: Optional[str] = Field(None, max_length=50)
 
-@app.route('/webapp/<user_id>')
-def webapp(user_id):
-    coll = get_collection()
-    if coll is None: return "DB Error", 500
-    try:
-        user_doc = coll.find_one({"_id": str(user_id)})
-        targets = user_doc.get('targets', {}) if user_doc else {}
-        for key, item in targets.items():
-            try:
-                g_date = datetime.strptime(item['date'], "%d.%m.%Y")
-                j_date = jdatetime.date.fromgregorian(date=g_date.date())
-                item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
-            except: item['shamsi_date'] = ""
-        return render_template('index.html', user_data=targets, user_id=str(user_id))
-    except: return "Error", 500
+    @validator('title')
+    def validate_title(cls, v):
+        if v and not v.strip():
+            raise ValueError("Title cannot be empty")
+        return v.strip() if v else v
 
-@app.route('/api/add/<user_id>', methods=['POST'])
-def add_event_api(user_id):
-    try:
-        data = request.json
-        formatted = parse_date(data.get('date'))
-        if not formatted: return jsonify({"success": False, "error": "Invalid Date"}), 400
-        coll = get_collection()
-        if coll is not None:
-            evt_id = f"evt_{uuid.uuid4().hex[:6]}"
-            new_item = {"title": data.get('title'), "date": formatted}
-            coll.update_one({"_id": str(user_id)}, {"$set": {f"targets.{evt_id}": new_item}}, upsert=True)
-            return jsonify({"success": True})
-        return jsonify({"success": False}), 500
-    except Exception as e: return jsonify({"success": False, "error": str(e)}), 500
+# ==================== FASTAPI APP ====================
+templates = Jinja2Templates(directory="templates")
 
-@app.route('/api/delete/<user_id>', methods=['POST'])
-def delete_event_api(user_id):
-    try:
-        key = request.json.get('key')
-        coll = get_collection()
-        if coll is not None:
-            coll.update_one({"_id": str(user_id)}, {"$unset": {f"targets.{key}": ""}})
-            return jsonify({"success": True})
-        return jsonify({"success": False}), 500
-    except Exception as e: return jsonify({"success": False, "error": str(e)}), 500
+async def lifespan(app: FastAPI):
+    """Application lifespan management"""
+    global db_client
+    
+    # 1. Database Connection & Indexing
+    if MONGO_URI:
+        db_client = AsyncIOMotorClient(
+            MONGO_URI,
+            tls=True,
+            tlsCAFile=certifi.where(),
+            maxPoolSize=10,
+            minPoolSize=1
+        )
+        try:
+            await db_client['time_manager_db']['users'].create_index("_id")
+            logger.info("✅ Database Connected & Indexed")
+        except Exception as e:
+            logger.error(f"❌ Database Init Error: {e}")
+    
+    # 2. Telegram Bot Start
+    if BOT_TOKEN:
+        await bot_app.initialize()
+        await bot_app.start()
+        asyncio.create_task(bot_app.updater.start_polling(drop_pending_updates=True))
+        logger.info("✅ Telegram Bot Started")
+    
+    yield  # Application runs here
+    
+    # 3. Graceful Shutdown
+    if BOT_TOKEN:
+        await bot_app.updater.stop()
+        await bot_app.stop()
+        await bot_app.shutdown()
+    if db_client:
+        db_client.close()
+    logger.info("🛑 Shutdown Complete")
 
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, use_reloader=False)
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- BOT HELPERS ---
-def main_kb(uid):
-    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
-        [KeyboardButton("➕ Add Event"), KeyboardButton("🗑 Delete Event")],
-        [KeyboardButton("📞 Contact Support")]
-    ], resize_keyboard=True)
+# ==================== GLOBAL EXCEPTION HANDLER ====================
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global Error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "error": "Internal Server Error"}
+    )
 
-# --- NOTIFICATIONS ---
-async def daily_notification_check(context: ContextTypes.DEFAULT_TYPE):
-    coll = get_collection()
-    if coll is None: return
-    users = coll.find({})
-    today = datetime.now().date()
-    for user in users:
-        uid = user['_id']
-        targets = user.get('targets', {})
-        for key, item in targets.items():
-            try:
-                event_date = datetime.strptime(item['date'], "%d.%m.%Y").date()
-                days_left = (event_date - today).days
-                msg = ""
-                if days_left == 1: msg = f"🔔 **Reminder:**\n'{item['title']}' is Tomorrow! ⏳"
-                elif days_left == 0: msg = f"🚨 **TODAY:**\n'{item['title']}' is happening! 🎉"
-                if msg: await context.bot.send_message(chat_id=uid, text=msg, parse_mode='Markdown')
-            except: continue
-
-# --- HANDLERS ---
-GET_TITLE, GET_DATE = range(2)
+# ==================== BOT HANDLERS ====================
 SUPPORT_MSG = range(1)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(update: Update, context):
+    """Start command handler"""
     uid = str(update.effective_user.id)
-    coll = get_collection()
-    if coll is not None: coll.update_one({"_id": uid}, {"$setOnInsert": {"targets": {}}}, upsert=True)
+    coll = get_db()
     
-    welcome_text = (
-        f"👋 **Hello, {update.effective_user.first_name}!**\n\n"
-        "Welcome to **Time Manager**, your personal assistant for tracking life's important moments.\n\n"
-        "✨ **Capabilities:**\n"
-        "📅 **Visual App:** Manage events visually.\n"
-        "⏳ **Countdowns:** Smart day counters.\n"
-        "🔔 **Notifications:** Alerts 1 day before & on the day.\n"
-        "🌍 **Dates:** Gregorian & Solar (Shamsi) support.\n\n"
-        "👇 **Select an option to begin:**"
+    await coll.update_one(
+        {"_id": uid},
+        {"$setOnInsert": {"targets": {}, "created_at": datetime.utcnow()}},
+        upsert=True
     )
-    await update.message.reply_text(welcome_text, reply_markup=main_kb(uid), parse_mode='Markdown')
-
-async def post_init(application: Application):
-    if WEBAPP_URL_BASE:
-        try: await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=WEBAPP_URL_BASE)))
-        except: pass
-
-async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 **Enter Event Name:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
-    return GET_TITLE
-
-async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text in ["❌ Cancel", "📱 Open App", "➕ Add Event", "🗑 Delete Event", "📞 Contact Support"]:
-        await update.message.reply_text("❌ Cancelled.", reply_markup=main_kb(update.effective_user.id))
-        return ConversationHandler.END
-    context.user_data['title'] = update.message.text
-    await update.message.reply_text("📅 **Enter Date (Year.Month.Day):**", parse_mode='Markdown')
-    return GET_DATE
-
-async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "❌ Cancel": return await cancel(update, context)
-    formatted = parse_date(update.message.text)
-    uid = str(update.effective_user.id)
-    if formatted:
-        coll = get_collection()
-        if coll is not None:
-            evt_id = f"evt_{uuid.uuid4().hex[:6]}"
-            coll.update_one({"_id": uid}, {"$set": {f"targets.{evt_id}": {"title": context.user_data['title'], "date": formatted}}}, upsert=True)
-            await update.message.reply_text("✅ **Saved!**", reply_markup=main_kb(uid), parse_mode='Markdown')
-        else: await update.message.reply_text("⛔ DB Error", reply_markup=main_kb(uid))
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("❌ **Invalid Date.** Try again:", parse_mode='Markdown')
-        return GET_DATE
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Cancelled.", reply_markup=main_kb(update.effective_user.id))
-    return ConversationHandler.END
-
-async def delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    coll = get_collection()
-    user_doc = coll.find_one({"_id": uid}) if coll is not None else None
-    targets = user_doc.get('targets', {}) if user_doc else {}
-    if not targets:
-        await update.message.reply_text("📭 **List is empty.**", reply_markup=main_kb(uid), parse_mode='Markdown')
-        return
-    kb = [[InlineKeyboardButton(f"❌ {v['title']}", callback_data=f"ask_{k}")] for k, v in targets.items()]
-    await update.message.reply_text("🗑 **Tap to delete:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
-
-async def delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    data = query.data
-    uid = str(update.effective_user.id)
-    if data.startswith("ask_"):
-        key = data.replace("ask_", "")
-        kb = [[InlineKeyboardButton("✅ Yes", callback_data=f"cnf_{key}")], [InlineKeyboardButton("🔙 No", callback_data="no")]]
-        await query.edit_message_text("⚠️ **Confirm deletion?**", reply_markup=InlineKeyboardMarkup(kb), parse_mode='Markdown')
-    elif data.startswith("cnf_"):
-        key = data.replace("cnf_", "")
-        coll = get_collection()
-        if coll is not None:
-            coll.update_one({"_id": uid}, {"$unset": {f"targets.{key}": ""}})
-            await query.edit_message_text("✅ **Deleted.**")
-    elif data == "no": await query.delete_message()
-
-async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📬 **Type your message:**", reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True), parse_mode='Markdown')
-    return SUPPORT_MSG
-
-async def support_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "❌ Cancel": return await cancel(update, context)
-    if ADMIN_ID:
-        await context.bot.send_message(ADMIN_ID, f"📩 **Support:**\nID: `{update.effective_user.id}`\nMsg: {update.message.text}\n\nReply: `/reply {update.effective_user.id} msg`", parse_mode='Markdown')
-        await update.message.reply_text("✅ Sent!", reply_markup=main_kb(update.effective_user.id))
-    return ConversationHandler.END
-
-async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
-    try:
-        uid, txt = context.args[0], " ".join(context.args[1:])
-        await context.bot.send_message(uid, f"📨 **Support Reply:**\n{txt}", parse_mode='Markdown')
-        await update.message.reply_text("✅ Sent.")
-    except: pass
-
-# --- INPUT GUARD (CATCH ALL) ---
-async def ignore_random_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Catches any input that is NOT a command and NOT inside a conversation."""
+    
+    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
+    
+    kb = ReplyKeyboardMarkup([
+        [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
+        [KeyboardButton("📞 Contact Support")]
+    ], resize_keyboard=True)
+    
     await update.message.reply_text(
-        "⛔ **I didn't understand that.**\n\nPlease select an option from the menu below.",
-        reply_markup=main_kb(update.effective_user.id),
+        f"👋 **Hello {update.effective_user.first_name}!**\n\n"
+        "Manage your life events professionally.\n"
+        "Tap **Open App** below to start.",
+        reply_markup=kb,
         parse_mode='Markdown'
     )
 
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    if not BOT_TOKEN: return
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-    if app.job_queue: app.job_queue.run_daily(daily_notification_check, time=time(hour=8, minute=0))
+async def support_start(update: Update, context):
+    """Support conversation start"""
+    await update.message.reply_text(
+        "📬 **Type your message:**",
+        reply_markup=ReplyKeyboardMarkup([["❌ Cancel"]], resize_keyboard=True)
+    )
+    return SUPPORT_MSG
 
-    app.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^(➕|Add)"), add_start)],
-        states={GET_TITLE: [MessageHandler(filters.TEXT, receive_title)], GET_DATE: [MessageHandler(filters.TEXT, receive_date)]},
-        fallbacks=[MessageHandler(filters.ALL, receive_title)]
-    ))
-    app.add_handler(ConversationHandler(
+async def support_receive(update: Update, context):
+    """Support message receiver"""
+    if update.message.text == "❌ Cancel":
+        await start_command(update, context)
+        return ConversationHandler.END
+    
+    if ADMIN_ID:
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"📩 **Support:**\nUser: `{update.effective_user.id}`\n\n{update.message.text}",
+            parse_mode='Markdown'
+        )
+        await update.message.reply_text("✅ Message sent to support team.")
+    
+    return ConversationHandler.END
+
+# Setup Telegram Bot
+bot_app = None
+if BOT_TOKEN:
+    bot_app = Application.builder().token(BOT_TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^(📞|Contact)"), support_start)],
         states={SUPPORT_MSG: [MessageHandler(filters.TEXT, support_receive)]},
-        fallbacks=[MessageHandler(filters.ALL, cancel)]
+        fallbacks=[MessageHandler(filters.ALL, start_command)]
     ))
-    app.add_handler(MessageHandler(filters.Regex("^(🗑|Delete)"), delete_menu))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("reply", admin_reply))
-    app.add_handler(CallbackQueryHandler(delete_callback))
-    
-    # --- CATCH ALL HANDLER (Must be last) ---
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, ignore_random_input))
-    
-    print("✅ Bot Running...")
-    app.run_polling(drop_pending_updates=True)
 
-if __name__ == "__main__":
-    main()
+# ==================== ROUTES ====================
+@app.get("/")
+def home():
+    return HTMLResponse("<h3>TimeManager Pro 🚀</h3><p>System Operational</p>")
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "time": time.time()}
+
+@app.get("/webapp/{user_id}", response_class=HTMLResponse)
+async def render_webapp(request: Request, user_id: str):
+    """Render webapp for user"""
+    coll = get_db()
+    user_doc = await coll.find_one({"_id": user_id})
+    targets = user_doc.get('targets', {}) if user_doc else {}
+    
+    # Convert dates to Shamsi for display
+    for key, item in targets.items():
+        try:
+            g_date = datetime.strptime(item['date'], "%d.%m.%Y")
+            j_date = jdatetime.date.fromgregorian(date=g_date.date())
+            item['shamsi_date'] = j_date.strftime("%Y/%m/%d")
+        except:
+            item['shamsi_date'] = ""
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "user_data": targets
+    })
+
+@app.post("/api/add")
+async def api_add(payload: EventModel, request: Request):
+    """Add new event"""
+    await rate_limit(request)
+    
+    user_info = validate_telegram_data(payload.initData)
+    if not user_info:
+        raise HTTPException(403, "Invalid Security Data")
+    
+    formatted_date = parse_date(payload.date)
+    if not formatted_date:
+        return JSONResponse(
+            {"success": False, "error": "Invalid Date Format"},
+            status_code=400
+        )
+    
+    evt_id = f"evt_{uuid.uuid4().hex[:8]}"
+    coll = get_db()
+    
+    await coll.update_one(
+        {"_id": str(user_info['id'])},
+        {"$set": {
+            f"targets.{evt_id}": {
+                "title": payload.title,
+                "date": formatted_date,
+                "created_at": datetime.utcnow()
+            }
+        }},
+        upsert=True
+    )
+    
+    logger.info(f"Event added for user {user_info['id']}: {payload.title}")
+    return {"success": True}
+
+@app.post("/api/delete")
+async def api_delete(payload: EventModel, request: Request):
+    """Delete event"""
+    await rate_limit(request)
+    
+    user_info = validate_telegram_data(payload.initData)
+    if not user_info:
+        raise HTTPException(403, "Invalid Security Data")
+    
+    coll = get_db()
+    await coll.update_one(
+        {"_id": str(user_info['id'])},
+        {"$unset": {f"targets.{payload.key}": ""}}
+    )
+    
+    logger.info(f"Event deleted for user {user_info['id']}: {payload.key}")
+    return {"success": True}
