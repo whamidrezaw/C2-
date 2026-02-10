@@ -215,19 +215,16 @@ async def global_exception_handler(request: Request, exc: Exception):
 SUPPORT_MSG = range(1)
 
 async def start_command(update: Update, context):
-    """Start command handler"""
     uid = str(update.effective_user.id)
     coll = get_db()
-    
-        await coll.update_one(
+    await coll.update_one(
         {"_id": uid},
         {"$setOnInsert": {"targets": {}, "created_at": datetime.utcnow()}},
         upsert=True
     )
     
-    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"  # ✅ 4 تا space
+    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
     
-    # ✅ این ۳ خط جدید:
     await context.bot.set_chat_menu_button(
         chat_id=update.effective_chat.id,
         menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=url))
@@ -237,15 +234,13 @@ async def start_command(update: Update, context):
         [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
         [KeyboardButton("📞 Contact Support")]
     ], resize_keyboard=True)
-
+    
     await update.message.reply_text(
         f"👋 **Hello {update.effective_user.first_name}!**\n\n"
-        "Manage your life events professionally.\n"
         "Tap **Open App** below to start.",
         reply_markup=kb,
         parse_mode='Markdown'
     )
-
 async def support_start(update: Update, context):
     """Support conversation start"""
     await update.message.reply_text(
