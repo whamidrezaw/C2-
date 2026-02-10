@@ -1,5 +1,10 @@
+fastapi
+uvicorn[standard]
 python-telegram-bot
-flask
-pymongo
+motor
+jinja2
+python-multipart
 certifi
 jdatetime
+dnspython
+email-validator
