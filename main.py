@@ -219,14 +219,13 @@ async def start_command(update: Update, context):
     uid = str(update.effective_user.id)
     coll = get_db()
     
-    await coll.update_one(
+        await coll.update_one(
         {"_id": uid},
         {"$setOnInsert": {"targets": {}, "created_at": datetime.utcnow()}},
         upsert=True
     )
     
-
-        url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
+    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"  # ✅ 4 تا space
     
     # ✅ این ۳ خط جدید:
     await context.bot.set_chat_menu_button(
@@ -234,14 +233,11 @@ async def start_command(update: Update, context):
         menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=url))
     )
     
-    kb = ReplyKeyboardMarkup([...])
-
-    
     kb = ReplyKeyboardMarkup([
         [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
         [KeyboardButton("📞 Contact Support")]
     ], resize_keyboard=True)
-    
+
     await update.message.reply_text(
         f"👋 **Hello {update.effective_user.first_name}!**\n\n"
         "Manage your life events professionally.\n"
