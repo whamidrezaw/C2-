@@ -3,52 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Time Manager</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self';">
+    <title>Time Manager Pro</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="/static/style.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-color: #f3f4f6; --card-bg: #ffffff; --text-primary: #1f2937; --text-secondary: #6b7280;
-            --red: #ef4444; --yellow: #f59e0b; --green: #10b981; --gray: #9ca3af; --blue: #3b82f6;
-        }
-        body { background: var(--tg-theme-secondary-bg-color, var(--bg-color)); color: var(--tg-theme-text-color, var(--text-primary)); font-family: 'Inter', sans-serif; margin: 0; padding: 20px; padding-bottom: 80px; }
-        .container { max-width: 500px; margin: 0 auto; }
-        
-        .header-card { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 24px; border-radius: 24px; text-align: center; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3); }
-        .clock { font-size: 2.5rem; font-weight: 700; }
-        
-        /* QUOTE STYLE */
-        .quote { margin-top: 10px; font-size: 0.9rem; font-style: italic; opacity: 0.9; font-weight: 400; min-height: 20px; }
-
-        .card { background: var(--tg-theme-bg-color, var(--card-bg)); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; position: relative;}
-        .card-info { flex-grow: 1; margin-left: 12px; }
-        .card-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 6px; }
-        
-        .date-row { font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px; }
-        .date-item { display: flex; align-items: center; gap: 6px; }
-        .date-label { font-size: 0.75rem; opacity: 0.7; font-weight: 600; min-width: 45px; }
-        
-        .badge { padding: 8px 12px; border-radius: 12px; color: white; font-weight: bold; font-size: 0.9rem; min-width: 70px; text-align: center; }
-        .bg-red { background: var(--red); } .bg-yellow { background: var(--yellow); } .bg-green { background: var(--green); } .bg-gray { background: var(--gray); }
-        
-        .bottom-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 480px; display: flex; gap: 10px; z-index: 100; }
-        .action-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .action-btn:active { transform: scale(0.96); }
-        .btn-add { background-color: var(--blue); color: white; }
-        .btn-del { background-color: var(--card-bg); color: var(--red); border: 2px solid #f3f4f6; }
-
-        .del-overlay { display: none; position: absolute; right: 10px; top: 10px; bottom: 10px; width: 40px; background: #ffebee; color: red; align-items: center; justify-content: center; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .delete-mode .del-overlay { display: flex; }
-    </style>
 </head>
 <body>
+
 <div class="container">
     <div class="header-card">
-        <div class="clock" id="clock">00:00</div>
-        <div id="date-display">Loading...</div>
-        <div class="quote" id="quote-display"></div>
+        <div class="clock" id="clock">--:--</div>
+        <div class="date-display" id="date-display">Loading...</div>
+        <div class="quote" id="quote-display">Initializing...</div>
     </div>
-    <div id="list"></div>
+    
+    <div id="list">
+        <div class="empty-state">
+            <div style="font-size:40px; margin-bottom:10px;">⏳</div>
+            Loading events...
+        </div>
+    </div>
 </div>
 
 <div class="bottom-bar">
@@ -57,20 +32,37 @@
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp; tg.expand();
-    const userData = {{ user_data | tojson }};
-    const userID = "{{ user_id }}"; 
+    // ==================== SETUP & SECURITY ====================
+    const tg = window.Telegram.WebApp; 
+    tg.expand(); 
+
+    // Security check: Must be opened in Telegram
+    if (!tg.initData) {
+        document.body.innerHTML = "<h3 style='text-align:center; padding:50px;'>⛔ Access Denied<br>Please open in Telegram.</h3>";
+        throw new Error("Not in Telegram");
+    }
+
+    const initData = tg.initData; 
+    const userData = JSON.parse('{{ user_data | tojson | safe }}');
     let isDeleteMode = false;
 
-    // --- MOTIVATIONAL QUOTES (20 Short Ones) ---
+    // XSS Protection
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // ==================== UI UTILS ====================
     const quotes = [
         "Make it happen.", "Seize the day.", "Time is gold.", "Stay focused.",
         "Dream big.", "Keep going.", "You can do it.", "Believe in yourself.",
-        "Action wins.", "No excuses.", "Create the future.", "Stay hungry.",
-        "Work hard.", "Shine bright.", "Trust the process.", "One step a day.",
-        "Focus on today.", "Be productive.", "Never give up.", "Your time is now."
+        "Action wins.", "No excuses.", "Create the future.", "Stay hungry."
     ];
-    // Pick random
     document.getElementById('quote-display').innerText = `"${quotes[Math.floor(Math.random() * quotes.length)]}"`;
 
     function updateClock() {
@@ -78,82 +70,158 @@
         document.getElementById('clock').innerText = now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
         document.getElementById('date-display').innerText = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
     }
-    setInterval(updateClock, 1000); updateClock();
+    
+    const clockInterval = setInterval(updateClock, 1000); 
+    updateClock();
+    
+    // Cleanup on unload
+    window.addEventListener('beforeunload', () => clearInterval(clockInterval));
 
-    async function triggerAdd() {
-        const title = prompt("Enter Event Name:");
-        if (!title) return;
-        const date = prompt("Enter Date (YYYY.MM.DD or 1403.MM.DD):");
-        if (!date) return;
-        tg.MainButton.showProgress();
+    // Fetch with timeout
+    async function fetchWithTimeout(resource, options = {}) {
+        const { timeout = 8000 } = options;
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        
         try {
-            const res = await fetch(`/api/add/${userID}`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ title, date })
+            const response = await fetch(resource, {
+                ...options,
+                signal: controller.signal  
             });
-            const json = await res.json();
-            if (json.success) window.location.reload();
-            else alert("Error: " + json.error);
-        } catch (e) { alert("Connection Failed"); }
-        tg.MainButton.hideProgress();
-    }
-
-    function toggleDeleteMode() {
-        isDeleteMode = !isDeleteMode;
-        const list = document.getElementById('list');
-        if (isDeleteMode) {
-            list.classList.add('delete-mode');
-            tg.HapticFeedback.notificationOccurred('warning');
-        } else {
-            list.classList.remove('delete-mode');
+            clearTimeout(id);
+            return response;
+        } catch (error) {
+            clearTimeout(id);
+            throw error;
         }
     }
 
-    async function deleteEvent(key, title) {
-        if (!confirm(`Delete "${title}"?`)) return;
+    // ==================== ACTIONS ====================
+    async function triggerAdd() {
+        if (isDeleteMode) toggleDeleteMode();
+
+        const title = prompt("Enter Event Name (Max 50 chars):");
+        if (!title) return;
+        if (title.length > 50) {
+            alert("Title is too long!");
+            return;
+        }
+
+        const date = prompt("Enter Date (Examples: 2025.12.30 or 1404.01.01):");
+        if (!date) return;
+        
         tg.MainButton.showProgress();
+        
         try {
-            const res = await fetch(`/api/delete/${userID}`, {
+            const res = await fetchWithTimeout(`/api/add`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ key })
+                body: JSON.stringify({ initData: initData, title: title, date: date })
             });
-            if (res.ok) window.location.reload();
-        } catch (e) { alert("Failed"); }
+            
+            const json = await res.json();
+            if (json.success) {
+                tg.HapticFeedback.notificationOccurred('success');
+                window.location.reload();
+            } else {
+                tg.HapticFeedback.notificationOccurred('error');
+                alert("Error: " + (json.error || "Invalid Data"));
+            }
+        } catch (e) {
+            alert("Connection Error or Timeout");
+        }
+        
         tg.MainButton.hideProgress();
     }
 
+    // ✅ اصلاح شده: خواندن عنوان از userData به جای onclick
+    async function deleteEvent(key) {
+        const title = userData[key] ? userData[key].title : "Event";
+        
+        if (!confirm(`Delete "${title}"?`)) return;
+        
+        tg.MainButton.showProgress();
+        
+        try {
+            const res = await fetchWithTimeout(`/api/delete`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ initData: initData, key: key })
+            });
+            
+            if (res.ok) {
+                tg.HapticFeedback.notificationOccurred('success');
+                const card = document.querySelector(`[data-key="${key}"]`);
+                if (card) {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        card.remove();
+                        if (document.querySelectorAll('.card').length === 0) {
+                            window.location.reload();
+                        }
+                    }, 300);
+                }
+            } else {
+                alert("Failed to delete");
+            }
+        } catch (e) {
+            alert("Connection Error");
+        }
+        
+        tg.MainButton.hideProgress();
+    }
+
+    // ==================== RENDER ====================
     const listDiv = document.getElementById('list');
+    
     if (!userData || Object.keys(userData).length === 0) {
-        listDiv.innerHTML = `<div style="text-align:center; padding:40px; opacity:0.5;">No events.<br>Tap "Add Event".</div>`;
+        listDiv.innerHTML = `
+            <div class="empty-state">
+                <div style="font-size:40px; margin-bottom:10px;">📅</div>
+                No events yet.<br>Tap "Add Event" to start.
+            </div>`;
     } else {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        
         const events = Object.entries(userData).map(([key, item]) => {
             try {
                 const parts = item.date.split('.'); 
                 const target = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                const today = new Date(); today.setHours(0,0,0,0);
-                const diff = Math.ceil((target - today) / 86400000);
+                const diff = Math.ceil((target - now) / 86400000);
                 return { ...item, key, diff };
-            } catch { return { ...item, key, diff: 0 }; }
+            } catch { 
+                return { ...item, key, diff: 0 }; 
+            }
         }).sort((a, b) => a.diff - b.diff);
 
         let html = '';
         events.forEach(item => {
             let cls = 'bg-green';
-            if (item.diff < 0) cls = 'bg-gray';
-            else if (item.diff < 180) cls = 'bg-red';
-            else if (item.diff <= 365) cls = 'bg-yellow';
+            let txt = item.diff + " Days";
 
-            const txt = item.diff < 0 ? "Done" : item.diff + " Days";
+            if (item.diff < 0) {
+                cls = 'bg-gray';
+                txt = "Done";
+            } else if (item.diff === 0) {
+                cls = 'bg-red';
+                txt = "Today!";
+            } else if (item.diff < 30) {
+                cls = 'bg-red';
+            } else if (item.diff <= 180) {
+                cls = 'bg-yellow';
+            }
+
             const shamsiPart = item.shamsi_date ? 
                 `<div class="date-item"><span class="date-label">☀️ IR:</span> ${item.shamsi_date}</div>` : '';
 
+            // ✅ اصلاح شده: onclick فقط key را می‌فرستد
             html += `
-            <div class="card" onclick="if(isDeleteMode) deleteEvent('${item.key}', '${item.title}')">
+            <div class="card" data-key="${item.key}" onclick="if(isDeleteMode) deleteEvent('${item.key}')">
                 <div style="font-size: 24px;">📌</div>
                 <div class="card-info">
-                    <div class="card-title">${item.title}</div>
+                    <div class="card-title">${escapeHtml(item.title)}</div>
                     <div class="date-row">
                         <div class="date-item"><span class="date-label">📅 EN:</span> ${item.date}</div>
                         ${shamsiPart}
@@ -163,13 +231,36 @@
                 <div class="del-overlay">🗑</div>
             </div>`;
         });
+        
         listDiv.innerHTML = html;
     }
+
+    function toggleDeleteMode() {
+        isDeleteMode = !isDeleteMode;
+        const list = document.getElementById('list');
+        const btnDel = document.querySelector('.btn-del');
+        
+        if (isDeleteMode) {
+            list.classList.add('delete-mode');
+            btnDel.innerText = "Done";
+            btnDel.style.borderColor = "var(--danger-color)";
+            tg.HapticFeedback.impactOccurred('medium');
+        } else {
+            list.classList.remove('delete-mode');
+            btnDel.innerText = "🗑 Delete";
+            btnDel.style.borderColor = "#f3f4f6";
+        }
+    }
     
+    // ==================== THEME ====================
     if (tg.themeParams.bg_color) {
         document.body.style.background = tg.themeParams.secondary_bg_color;
         document.documentElement.style.setProperty('--card-bg', tg.themeParams.bg_color);
         document.documentElement.style.setProperty('--text-primary', tg.themeParams.text_color);
+        document.documentElement.style.setProperty('--text-secondary', tg.themeParams.hint_color);
+        if (tg.themeParams.button_color) {
+            document.documentElement.style.setProperty('--accent-color', tg.themeParams.button_color);
+        }
     }
 </script>
 </body>
