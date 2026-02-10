@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
 
+from telegram import MenuButtonWebApp
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters
 
@@ -224,7 +225,17 @@ async def start_command(update: Update, context):
         upsert=True
     )
     
-    url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
+
+        url = f"{WEBAPP_URL_BASE}/webapp/{uid}" if WEBAPP_URL_BASE else "https://telegram.org"
+    
+    # ✅ این ۳ خط جدید:
+    await context.bot.set_chat_menu_button(
+        chat_id=update.effective_chat.id,
+        menu_button=MenuButtonWebApp(text="📱 Open App", web_app=WebAppInfo(url=url))
+    )
+    
+    kb = ReplyKeyboardMarkup([...])
+
     
     kb = ReplyKeyboardMarkup([
         [KeyboardButton("📱 Open App", web_app=WebAppInfo(url=url))],
