@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TimeManager Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+  <header class="app-header">
+    <span class="app-icon">📅</span>
+    <span class="app-title">TimeManager Pro</span>
+  </header>
+
+  <main id="list" class="event-list"></main>
+
+  <div class="input-container">
+
+    <input
+      type="text"
+      id="title"
+      placeholder="Event title (e.g. Birthday)"
+      maxlength="200"
+      autocomplete="off"
+    >
+
+    <input
+      type="date"
+      id="date"
+    >
+
+    <!-- Repeat dropdown -->
+    <select id="repeat" class="repeat-select">
+      <option value="none">⏰ One-time reminder</option>
+      <option value="daily">🔁 Repeat Daily</option>
+      <option value="weekly">🔁 Repeat Weekly</option>
+      <option value="monthly">🔁 Repeat Monthly</option>
+      <option value="yearly">🎂 Repeat Every Year (Birthday…)</option>
+    </select>
+
+    <div class="btn-row">
+      <button
+        id="cancelBtn"
+        class="btn-secondary"
+        style="display:none"
+        onclick="TimeManager.cancelEdit()"
+      >✕ Cancel</button>
+
+      <button
+        id="addBtn"
+        class="btn-primary"
+        onclick="TimeManager.add(
+          document.getElementById('title').value,
+          document.getElementById('date').value,
+          document.getElementById('repeat').value
+        )"
+      >＋ Add Event</button>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
