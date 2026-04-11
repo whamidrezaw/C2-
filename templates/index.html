@@ -26,12 +26,25 @@
       autocomplete="off"
     >
 
-    <input
-      type="date"
-      id="date"
-    >
+    <!-- دو فیلد تاریخ — شمسی و میلادی -->
+    <div class="date-row">
+      <div class="date-field">
+        <label class="date-label">📅 Gregorian</label>
+        <input type="date" id="date">
+      </div>
+      <div class="date-field">
+        <label class="date-label">📅 Jalali (شمسی)</label>
+        <input
+          type="text"
+          id="date-jalali"
+          placeholder="1404/01/22"
+          maxlength="10"
+          inputmode="numeric"
+          autocomplete="off"
+        >
+      </div>
+    </div>
 
-    <!-- Repeat dropdown -->
     <select id="repeat" class="repeat-select">
       <option value="none">⏰ One-time reminder</option>
       <option value="daily">🔁 Repeat Daily</option>
@@ -46,7 +59,7 @@
         class="btn-secondary"
         style="display:none"
         onclick="TimeManager.cancelEdit()"
-      >✕ Cancel</button>
+      >✕</button>
 
       <button
         id="addBtn"
@@ -56,13 +69,12 @@
           document.getElementById('date').value,
           document.getElementById('repeat').value
         )"
-      >＋ Add Event</button>
+      >＋ Add</button>
     </div>
 
   </div>
 
   <div id="toast" class="toast"></div>
-
   <script src="/static/app.js"></script>
 </body>
 </html>
