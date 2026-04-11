@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
+import certifi
 from cachetools import TTLCache
 from telegram import Bot
 
@@ -23,17 +24,19 @@ logging.basicConfig(
 logger = logging.getLogger("TM_PRO")
 
 # ==================== DATABASE & CACHE ====================
-db_client = AsyncIOMotorClient(MONGO_URI)
-db = db_client["time_manager_pro"]
-events_coll = db["events"]
-users_coll = db["users"]
+# استفاده از mdb به جای db برای جلوگیری از تداخل نام
+db_client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
+mdb = db_client["time_manager_pro"]
+events_coll = mdb["events"]
+users_coll = mdb["users"]
 rate_cache = TTLCache(maxsize=10000, ttl=60)
 
 app = FastAPI()
 
-# Mount Static and Templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-render_engine = Jinja2Templates(directory="templates")
+# تنظیم آدرس‌دهی مطلق برای جلوگیری از ارور 500 در Render
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+tm_renderer = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # ==================== SECURITY UTILS ====================
 async def validate_request(request: Request, init_data: str):
@@ -46,7 +49,6 @@ async def validate_request(request: Request, init_data: str):
     user_id = str(user_data.get("id"))
     if not user_id.isdigit(): raise HTTPException(403, "INVALID_ID")
 
-    # Rate Limit
     rl_key = f"{user_id}:{request.client.host}"
     now = time.time()
     hist = rate_cache.get(rl_key, [])
@@ -57,7 +59,6 @@ async def validate_request(request: Request, init_data: str):
     hist.append(now)
     rate_cache[rl_key] = hist
 
-    # HMAC Protection
     hash_check = parsed.pop("hash", None)
     if now - int(parsed.get("auth_date", 0)) > 300: raise HTTPException(403, "EXPIRED")
     data_check = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
@@ -81,7 +82,6 @@ async def reminder_daemon(bot: Bot):
             }).limit(50)
 
             async for evt in cursor:
-                # Atomic Lock to prevent double-send
                 updated = await events_coll.find_one_and_update(
                     {"_id": evt["_id"], "notify_status": "pending"},
                     {"$set": {"notify_status": "processing"}}
@@ -115,17 +115,14 @@ async def reminder_daemon(bot: Bot):
 @app.get("/health")
 async def health():
     try:
-        await db.command("ping")
+        await mdb.command("ping")
         return {"status": "ok", "db": "connected"}
     except:
         raise HTTPException(500, "db_down")
 
-# مسیر اصلی وب‌اپ که ارور 404 را برطرف می‌کند
 @app.get("/webapp", response_class=HTMLResponse)
 async def render_webapp(request: Request):
-    # از render_engine استفاده کنید
-    return render_engine.TemplateResponse("index.html", {"request": request})
-
+    return tm_renderer.TemplateResponse("index.html", {"request": request})
 
 @app.post("/api/list")
 async def api_list(request: Request, payload: dict):
@@ -168,11 +165,8 @@ async def api_add(request: Request, payload: dict):
     logger.info(f"Event added: user={user_id}")
     return {"success": True}
 
-# ==================== LIFESPAN ====================
 @app.on_event("startup")
 async def startup_event():
-    # شروع Daemon در پس‌زمینه
     bot = Bot(token=BOT_TOKEN)
     asyncio.create_task(reminder_daemon(bot))
     logger.info("🚀 System Startup: Daemon Task Scheduled")
-
