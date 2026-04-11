@@ -332,7 +332,7 @@ async def health():
 
 @app.get("/webapp", response_class=HTMLResponse)
 async def render_webapp(request: Request):
-    return tm_renderer.TemplateResponse("index.html", {"request": request})
+    return tm_renderer.TemplateResponse(request, "index.html")
 
 
 @app.post("/api/list")
