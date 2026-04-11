@@ -93,8 +93,10 @@ const TimeManager = (() => {
     },
 
     // پارس ورودی شمسی: 1404/01/22 یا 1404-01-22
-    parse(str) {
-      str = str.trim().replace(/-/g, "/");
+parse(str) {
+      // این خط را جایگزین خط قبلی کنید:
+      str = str.trim().replace(/[\.\,\-]/g, "/"); 
+      
       const parts = str.split("/");
       if (parts.length !== 3) return null;
       const [jy, jm, jd] = parts.map(Number);
