@@ -123,7 +123,9 @@ async def health():
 # مسیر اصلی وب‌اپ که ارور 404 را برطرف می‌کند
 @app.get("/webapp", response_class=HTMLResponse)
 async def render_webapp(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # از render_engine استفاده کنید
+    return render_engine.TemplateResponse("index.html", {"request": request})
+
 
 @app.post("/api/list")
 async def api_list(request: Request, payload: dict):
