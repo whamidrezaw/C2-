@@ -1,10 +1,7 @@
 fastapi
-uvicorn[standard]
-python-telegram-bot
+uvicorn
 motor
-jinja2
+telegram
+cachetools
 python-multipart
 certifi
-jdatetime
-dnspython
-email-validator
