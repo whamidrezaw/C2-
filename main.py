@@ -33,7 +33,7 @@ app = FastAPI()
 
 # Mount Static and Templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+render_engine = Jinja2Templates(directory="templates")
 
 # ==================== SECURITY UTILS ====================
 async def validate_request(request: Request, init_data: str):
