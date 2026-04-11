@@ -28,7 +28,7 @@ logger = logging.getLogger("TM_PRO")
 MAX_TITLE_LEN       = 200
 MAX_EVENTS_PER_USER = 500
 RATE_LIMIT_COUNT    = 30
-AUTH_EXPIRE_SECS    = 300
+AUTH_EXPIRE_SECS    = 900
 VALID_REPEATS       = {"none", "daily", "weekly", "monthly", "yearly"}
 
 # ==================== ENV VALIDATION ====================
@@ -98,7 +98,7 @@ async def validate_request(request: Request, init_data: str) -> str:
         auth_date = int(parsed.get("auth_date", 0))
     except ValueError:
         raise HTTPException(403, "INVALID_AUTH_DATE")
-    if now - auth_date > AUTH_EXPIRE_SECS:
+    if abs(now - auth_date) > AUTH_EXPIRE_SECS:
         raise HTTPException(403, "EXPIRED")
 
     hash_check = parsed.pop("hash", None)
