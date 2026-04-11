@@ -2,12 +2,17 @@ import hmac, hashlib, json, time, html, logging, asyncio, os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import parse_qsl, unquote
+from typing import Optional
+
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from cachetools import TTLCache
 from telegram import Bot
 
-# --- CONFIGURATION ---
+# ==================== CONFIGURATION ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI", "YOUR_MONGO_URI")
 
@@ -17,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TM_PRO")
 
-# --- DB & CACHE ---
+# ==================== DATABASE & CACHE ====================
 db_client = AsyncIOMotorClient(MONGO_URI)
 db = db_client["time_manager_pro"]
 events_coll = db["events"]
@@ -26,7 +31,11 @@ rate_cache = TTLCache(maxsize=10000, ttl=60)
 
 app = FastAPI()
 
-# --- SECURITY: AUTH & RATE LIMIT ---
+# Mount Static and Templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# ==================== SECURITY UTILS ====================
 async def validate_request(request: Request, init_data: str):
     if not init_data: raise HTTPException(403, "NO_DATA")
     parsed = dict(parse_qsl(init_data, keep_blank_values=True))
@@ -57,11 +66,11 @@ async def validate_request(request: Request, init_data: str):
         raise HTTPException(403, "BAD_HASH")
     return user_id
 
-# --- DAEMON: REMINDER ENGINE ---
+# ==================== DAEMON: REMINDER ENGINE ====================
 async def reminder_daemon(bot: Bot):
     await events_coll.create_index("expire_at", expireAfterSeconds=0)
     await events_coll.create_index("next_notify_at")
-    logger.info("Daemon started and indexes verified.")
+    logger.info("✅ Daemon started and indexes verified.")
     
     while True:
         try:
@@ -101,7 +110,8 @@ async def reminder_daemon(bot: Bot):
             logger.error(f"Daemon Loop Error: {e}")
         await asyncio.sleep(30)
 
-# --- ROUTES ---
+# ==================== ROUTES ====================
+
 @app.get("/health")
 async def health():
     try:
@@ -109,6 +119,11 @@ async def health():
         return {"status": "ok", "db": "connected"}
     except:
         raise HTTPException(500, "db_down")
+
+# مسیر اصلی وب‌اپ که ارور 404 را برطرف می‌کند
+@app.get("/webapp", response_class=HTMLResponse)
+async def render_webapp(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/api/list")
 async def api_list(request: Request, payload: dict):
@@ -130,8 +145,9 @@ async def api_add(request: Request, payload: dict):
     if not title or not date_str: raise HTTPException(400, "BAD_INPUT")
     
     user = await users_coll.find_one({"_id": user_id}) or {}
-    tz = ZoneInfo(user.get("timezone", "UTC"))
+    tz_name = user.get("timezone", "UTC")
     try:
+        tz = ZoneInfo(tz_name)
         local_dt = datetime.strptime(date_str, "%Y-%m-%d")
         notify_utc = local_dt.replace(hour=9, minute=0, second=0, tzinfo=tz).astimezone(timezone.utc)
         event_utc = local_dt.replace(tzinfo=tz).astimezone(timezone.utc)
@@ -149,3 +165,12 @@ async def api_add(request: Request, payload: dict):
     })
     logger.info(f"Event added: user={user_id}")
     return {"success": True}
+
+# ==================== LIFESPAN ====================
+@app.on_event("startup")
+async def startup_event():
+    # شروع Daemon در پس‌زمینه
+    bot = Bot(token=BOT_TOKEN)
+    asyncio.create_task(reminder_daemon(bot))
+    logger.info("🚀 System Startup: Daemon Task Scheduled")
+
