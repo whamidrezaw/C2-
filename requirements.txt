@@ -1,7 +1,10 @@
+python-telegram-bot==21.1
 fastapi
-uvicorn
+uvicorn[standard]
 motor
-telegram
-cachetools
+jinja2
 python-multipart
 certifi
+jdatetime
+cachetools
+
