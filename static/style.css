@@ -20,7 +20,7 @@
   /* urgency colors */
   --color-red:    #e53935;
   --color-orange: #fb8c00;
-  --color-yellow: #f9a825;
+  --color-yellow: #a333ec;
   --color-green:  #388e3c;
   --color-past:   #9e9e9e;
 
@@ -42,7 +42,7 @@
   --shadow-md: 0 6px 20px rgba(0,0,0,0.45);
   --color-red-bg:    rgba(229,57,53,0.15);
   --color-orange-bg: rgba(251,140,0,0.15);
-  --color-yellow-bg: rgba(249,168,37,0.15);
+  --color-yellow-bg: rgba(163, 51, 236, 0.08);
   --color-green-bg:  rgba(56,142,60,0.15);
 }
 
