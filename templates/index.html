@@ -22,9 +22,29 @@
     <span class="app-title">TimeManager Pro</span>
   </header>
 
-  <main id="list" class="event-list" aria-live="polite" aria-label="Events list"></main>
+<main id="list" class="event-list" aria-live="polite" aria-label="Events list"></main>
 
-  <form id="eventForm" class="input-container" aria-label="Event form" novalidate>
+<button
+  type="button"
+  id="openComposerBtn"
+  class="floating-add-btn"
+  aria-label="Open add event form"
+>
+  ＋ Add event
+</button>
+
+<div id="composerOverlay" class="composer-overlay" hidden></div>
+
+<section
+  id="composerSheet"
+  class="composer-sheet"
+  aria-label="Event form"
+  aria-hidden="true"
+  hidden
+>
+  <div class="composer-handle" aria-hidden="true"></div>
+
+  <form id="eventForm" class="composer-form" novalidate>
     <label class="sr-only" for="title">Event title</label>
     <input
       type="text"
@@ -38,11 +58,7 @@
     <div class="date-row">
       <div class="date-field">
         <label class="date-label" for="date">📅 Gregorian</label>
-        <input
-          type="date"
-          id="date"
-          aria-label="Gregorian date"
-        >
+        <input type="date" id="date" aria-label="Gregorian date">
       </div>
 
       <div class="date-field">
@@ -98,9 +114,8 @@
         type="button"
         id="cancelBtn"
         class="btn-secondary"
-        style="display:none"
-        aria-label="Cancel edit"
-      >✕</button>
+        aria-label="Close form"
+      >Cancel</button>
 
       <button
         type="submit"
@@ -110,6 +125,7 @@
       >＋ Add</button>
     </div>
   </form>
+</section>
 
   <template id="detailExtrasTemplate">
     <section class="detail-actions" aria-label="Event actions">
