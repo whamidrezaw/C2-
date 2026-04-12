@@ -15,7 +15,7 @@ import certifi
 import jdatetime
 from bson import ObjectId
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -399,6 +399,19 @@ async def health():
         raise HTTPException(503, "db_timeout")
     except Exception:
         raise HTTPException(503, "db_down")
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/webapp", status_code=302)
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = os.path.join(BASE_DIR, "static", "favicon.ico")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    raise HTTPException(404, "favicon_not_found")
 
 
 @app.get("/webapp", response_class=HTMLResponse)
