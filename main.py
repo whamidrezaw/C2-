@@ -4,20 +4,19 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import parse_qsl, unquote
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import certifi
-from cachetools import TTLCache
 from telegram import Bot
 import jdatetime
 
 # ==================== CONFIGURATION ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI  = os.getenv("MONGO_URI")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,22 +36,43 @@ def _validate_env():
     if missing:
         raise RuntimeError(f"❌ Missing env vars: {', '.join(missing)}")
 
-# ==================== DATABASE & CACHE ====================
-db_client   = AsyncIOMotorClient(MONGO_URI or "mongodb://localhost", tlsCAFile=certifi.where())
-mdb         = db_client["time_manager_pro"]
-events_coll = mdb["events"]
-users_coll  = mdb["users"]
-rate_cache  = TTLCache(maxsize=10000, ttl=60)
+# ==================== RATE LIMIT ====================
+# Sliding window — dict ساده، بدون TTLCache تا TTL key را reset نکند
+_rate_store: dict[str, list[float]] = {}
+
+def _check_rate_limit(user_id: str) -> None:
+    now  = time.time()
+    hist = [t for t in _rate_store.get(user_id, []) if now - t < 60]
+    if len(hist) >= RATE_LIMIT_COUNT:
+        logger.warning(f"Rate limit hit: user={user_id}")
+        raise HTTPException(429, "RATE_LIMIT")
+    hist.append(now)
+    _rate_store[user_id] = hist
+
+# ==================== DATABASE ====================
+db_client   = None
+mdb         = None
+events_coll = None
+users_coll  = None
 
 # ==================== LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global db_client, mdb, events_coll, users_coll
+
     _validate_env()
+
+    db_client   = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
+    mdb         = db_client["time_manager_pro"]
+    events_coll = mdb["events"]
+    users_coll  = mdb["users"]
+
     await events_coll.create_index("expire_at", expireAfterSeconds=0)
     await events_coll.create_index("next_notify_at")
     await events_coll.create_index("user_id")
     await events_coll.create_index([("user_id", 1), ("event_ts_utc", 1)])
     logger.info("✅ Indexes verified.")
+
     bot  = Bot(token=BOT_TOKEN)
     task = asyncio.create_task(reminder_daemon(bot))
     logger.info("🚀 Daemon started.")
@@ -62,6 +82,7 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         logger.info("🛑 Daemon stopped safely.")
+    db_client.close()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -71,9 +92,29 @@ tm_renderer = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # ==================== SECURITY ====================
 async def validate_request(request: Request, init_data: str) -> str:
+    # [C-02] null-check اول
+    if not BOT_TOKEN:
+        raise HTTPException(500, "MISCONFIGURED")
     if not init_data:
         raise HTTPException(403, "NO_DATA")
+
     parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+
+    # [FIX-1] HMAC اول — قبل از rate limit
+    # جلوگیری از DoS: مهاجم نمی‌تواند بدون token معتبر rate limit کاربر را پر کند
+    hash_check = parsed.pop("hash", None)
+    if not hash_check:
+        raise HTTPException(403, "NO_HASH")
+
+    data_check = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+    secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+    computed   = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(computed, hash_check):
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning(f"Bad HMAC: ip={client_ip}")
+        raise HTTPException(403, "BAD_HASH")
+
+    # بعد از تأیید HMAC — استخراج user_id
     user_raw = parsed.get("user")
     if not user_raw:
         raise HTTPException(403, "NO_USER")
@@ -81,35 +122,20 @@ async def validate_request(request: Request, init_data: str) -> str:
         user_data = json.loads(unquote(user_raw))
     except json.JSONDecodeError:
         raise HTTPException(403, "INVALID_USER_JSON")
+
     user_id = str(user_data.get("id", ""))
     if not user_id.isdigit():
         raise HTTPException(403, "INVALID_ID")
-
-    rl_key = f"rl:{user_id}"
-    now    = time.time()
-    hist   = [t for t in rate_cache.get(rl_key, []) if now - t < 60]
-    if len(hist) >= RATE_LIMIT_COUNT:
-        logger.warning(f"Rate limit: {user_id}")
-        raise HTTPException(429, "RATE_LIMIT")
-    hist.append(now)
-    rate_cache[rl_key] = hist
 
     try:
         auth_date = int(parsed.get("auth_date", 0))
     except ValueError:
         raise HTTPException(403, "INVALID_AUTH_DATE")
-    if abs(now - auth_date) > AUTH_EXPIRE_SECS:
+    if abs(time.time() - auth_date) > AUTH_EXPIRE_SECS:
         raise HTTPException(403, "EXPIRED")
 
-    hash_check = parsed.pop("hash", None)
-    if not hash_check:
-        raise HTTPException(403, "NO_HASH")
-    data_check = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
-    secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-    computed   = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(computed, hash_check):
-        raise HTTPException(403, "BAD_HASH")
-
+    # [FIX-1] rate limit فقط برای کاربران تأییدشده
+    _check_rate_limit(user_id)
     return user_id
 
 
@@ -122,9 +148,6 @@ def _safe_oid(raw: str) -> ObjectId:
 
 # ==================== RECURRENCE ENGINE ====================
 def calc_next_notify(base_date: datetime, repeat: str, tz: ZoneInfo) -> datetime | None:
-    """
-    محاسبه دقیق زمان بعدی نوتیف — همیشه ساعت ۹ صبح به وقت محلی.
-    """
     if repeat == "none":
         return None
 
@@ -132,40 +155,51 @@ def calc_next_notify(base_date: datetime, repeat: str, tz: ZoneInfo) -> datetime
     base_local = base_date.astimezone(tz)
 
     if repeat == "daily":
-        candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        candidate = now_local.replace(
+            hour=9, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
 
     elif repeat == "weekly":
-        candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(weeks=1)
+        candidate = now_local.replace(
+            hour=9, minute=0, second=0, microsecond=0
+        ) + timedelta(weeks=1)
 
     elif repeat == "monthly":
         m = now_local.month + 1
         y = now_local.year + (1 if m > 12 else 0)
         m = m if m <= 12 else 1
         try:
-            candidate = now_local.replace(year=y, month=m, day=base_local.day,
-                                           hour=9, minute=0, second=0, microsecond=0)
+            candidate = now_local.replace(
+                year=y, month=m, day=base_local.day,
+                hour=9, minute=0, second=0, microsecond=0
+            )
         except ValueError:
-            # روز ماه کوتاه — اول ماه بعدی
-            candidate = now_local.replace(year=y, month=m, day=1,
-                                           hour=9, minute=0, second=0, microsecond=0)
+            candidate = now_local.replace(
+                year=y, month=m, day=1,
+                hour=9, minute=0, second=0, microsecond=0
+            )
 
     elif repeat == "yearly":
         next_year = now_local.year + 1
         try:
-            candidate = base_local.replace(year=next_year,
-                                            hour=9, minute=0, second=0, microsecond=0)
+            candidate = base_local.replace(
+                year=next_year,
+                hour=9, minute=0, second=0, microsecond=0
+            )
         except ValueError:
-            # ۲۹ فوریه در سال‌های غیر کبیسه
-            candidate = base_local.replace(year=next_year, month=3, day=1,
-                                            hour=9, minute=0, second=0, microsecond=0)
+            # ۲۹ فوریه در سال غیر کبیسه
+            candidate = base_local.replace(
+                year=next_year, month=3, day=1,
+                hour=9, minute=0, second=0, microsecond=0
+            )
     else:
         return None
 
     return candidate.astimezone(timezone.utc)
 
 
-def _expire_for_repeat(event_utc: datetime, repeat: str) -> datetime:
-    """تعیین expire_at بر اساس نوع تکرار"""
+def _expire_for_repeat(anchor: datetime, repeat: str) -> datetime:
+    """[FIX-2] anchor باید next_notify باشد نه base_date"""
     delta = {
         "none":    timedelta(days=30),
         "daily":   timedelta(days=2),
@@ -173,7 +207,7 @@ def _expire_for_repeat(event_utc: datetime, repeat: str) -> datetime:
         "monthly": timedelta(days=40),
         "yearly":  timedelta(days=400),
     }
-    return event_utc + delta.get(repeat, timedelta(days=30))
+    return anchor + delta.get(repeat, timedelta(days=30))
 
 
 def _repeat_label(repeat: str) -> str:
@@ -188,7 +222,6 @@ def _repeat_label(repeat: str) -> str:
 
 # ==================== JALALI HELPER ====================
 def to_jalali(date_iso: str) -> str:
-    """تبدیل تاریخ میلادی به شمسی — مثلاً ۱۴۰۴/۱/۲۲"""
     try:
         d  = datetime.strptime(date_iso, "%Y-%m-%d")
         jd = jdatetime.date.fromgregorian(date=d.date())
@@ -202,13 +235,16 @@ async def reminder_daemon(bot: Bot):
     logger.info("✅ Daemon loop running.")
     while True:
         try:
-            now    = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
+
+            # [FIX-3] sort به ترتیب زمانی — قدیمی‌ترین اول
             cursor = events_coll.find({
                 "next_notify_at": {"$lte": now},
                 "notify_status":  "pending"
-            }).limit(50)
+            }).sort("next_notify_at", 1).limit(50)
 
             async for evt in cursor:
+                # Optimistic lock — جلوگیری از پردازش تکراری
                 updated = await events_coll.find_one_and_update(
                     {"_id": evt["_id"], "notify_status": "pending"},
                     {"$set": {"notify_status": "processing"}}
@@ -221,6 +257,7 @@ async def reminder_daemon(bot: Bot):
                 date_iso     = evt.get("date_iso", "")
                 jalali_date  = to_jalali(date_iso)
 
+                # [C-01] html.escape فقط اینجا — هنگام ارسال تلگرام
                 msg_text = (
                     f"🔔 <b>Reminder</b>\n"
                     f"📌 {html.escape(evt['title'])}\n"
@@ -242,13 +279,15 @@ async def reminder_daemon(bot: Bot):
                         base_date = base_date.replace(tzinfo=timezone.utc)
 
                     if repeat != "none":
-                        next_notify = calc_next_notify(base_date, repeat, tz)
+                        next_notify  = calc_next_notify(base_date, repeat, tz)
+                        # [FIX-2] expire_at از next_notify محاسبه می‌شود
+                        expire_anchor = next_notify or now
                         await events_coll.update_one(
                             {"_id": evt["_id"]},
                             {"$set": {
                                 "notify_status":   "pending",
                                 "next_notify_at":  next_notify,
-                                "expire_at":       _expire_for_repeat(base_date, repeat),
+                                "expire_at":       _expire_for_repeat(expire_anchor, repeat),
                                 "notify_attempts": 0
                             }}
                         )
@@ -301,17 +340,21 @@ def _parse_event_input(payload: dict) -> dict:
 
     try:
         local_dt   = datetime.strptime(date_str, "%Y-%m-%d")
-        notify_utc = local_dt.replace(hour=9, minute=0, second=0, tzinfo=tz).astimezone(timezone.utc)
+        notify_utc = local_dt.replace(
+            hour=9, minute=0, second=0, tzinfo=tz
+        ).astimezone(timezone.utc)
         event_utc  = local_dt.replace(tzinfo=tz).astimezone(timezone.utc)
     except ValueError:
         raise HTTPException(400, "INVALID_DATE")
 
     return {
-        "title":           html.escape(title),
+        # [C-01] بدون html.escape — داده خام در DB
+        "title":           title,
         "date_iso":        date_str,
         "next_notify_at":  notify_utc,
         "event_ts_utc":    event_utc,
-        "expire_at":       _expire_for_repeat(event_utc, repeat),
+        # [FIX-2] expire از notify_utc (اولین رخداد)
+        "expire_at":       _expire_for_repeat(notify_utc, repeat),
         "repeat":          repeat,
         "tz_name":         tz_name,
         "notify_status":   "pending",
@@ -324,10 +367,17 @@ def _parse_event_input(payload: dict) -> dict:
 @app.get("/health")
 async def health():
     try:
-        await mdb.command("ping")
-        return {"status": "ok", "db": "connected", "ts": datetime.now(timezone.utc).isoformat()}
+        # [E-10] timeout 3 ثانیه
+        await asyncio.wait_for(mdb.command("ping"), timeout=3.0)
+        return {
+            "status": "ok",
+            "db": "connected",
+            "ts": datetime.now(timezone.utc).isoformat()
+        }
+    except asyncio.TimeoutError:
+        raise HTTPException(503, "db_timeout")
     except Exception:
-        raise HTTPException(500, "db_down")
+        raise HTTPException(503, "db_down")
 
 
 @app.get("/webapp", response_class=HTMLResponse)
@@ -336,9 +386,20 @@ async def render_webapp(request: Request):
 
 
 @app.post("/api/list")
-async def api_list(request: Request, payload: dict):
+async def api_list(request: Request, payload: dict = Body(...)):
     user_id = await validate_request(request, payload.get("initData", ""))
-    cursor  = events_coll.find({"user_id": user_id}).sort("event_ts_utc", 1).limit(100)
+
+    # [FIX-3] skip sanitize — جلوگیری از مقادیر منفی یا خیلی بزرگ
+    skip_raw = payload.get("skip", 0)
+    try:
+        skip = max(0, min(int(skip_raw), 5000))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "INVALID_SKIP")
+
+    cursor = events_coll.find(
+        {"user_id": user_id}
+    ).sort("event_ts_utc", 1).skip(skip).limit(50)
+
     targets = []
     async for e in cursor:
         date_iso = e.get("date_iso", "")
@@ -351,11 +412,12 @@ async def api_list(request: Request, payload: dict):
             "notify_status": e.get("notify_status", "pending"),
             "tz_name":       e.get("tz_name", "UTC"),
         })
-    return {"success": True, "targets": targets}
+
+    return {"success": True, "targets": targets, "has_more": len(targets) == 50}
 
 
 @app.post("/api/add")
-async def api_add(request: Request, payload: dict):
+async def api_add(request: Request, payload: dict = Body(...)):
     user_id = await validate_request(request, payload.get("initData", ""))
     count   = await events_coll.count_documents({"user_id": user_id})
     if count >= MAX_EVENTS_PER_USER:
@@ -375,13 +437,15 @@ async def api_add(request: Request, payload: dict):
 
 
 @app.post("/api/delete")
-async def api_delete(request: Request, payload: dict):
+async def api_delete(request: Request, payload: dict = Body(...)):
     user_id  = await validate_request(request, payload.get("initData", ""))
     event_id = payload.get("event_id", "")
     if not event_id:
         raise HTTPException(400, "NO_EVENT_ID")
 
-    result = await events_coll.delete_one({"_id": _safe_oid(event_id), "user_id": user_id})
+    result = await events_coll.delete_one(
+        {"_id": _safe_oid(event_id), "user_id": user_id}
+    )
     if result.deleted_count == 0:
         raise HTTPException(404, "NOT_FOUND_OR_UNAUTHORIZED")
 
@@ -390,7 +454,7 @@ async def api_delete(request: Request, payload: dict):
 
 
 @app.post("/api/edit")
-async def api_edit(request: Request, payload: dict):
+async def api_edit(request: Request, payload: dict = Body(...)):
     user_id  = await validate_request(request, payload.get("initData", ""))
     event_id = payload.get("event_id", "")
     if not event_id:
@@ -404,6 +468,9 @@ async def api_edit(request: Request, payload: dict):
     data = _parse_event_input(payload)
     data["updated_at"] = datetime.now(timezone.utc)
 
-    await events_coll.update_one({"_id": oid, "user_id": user_id}, {"$set": data})
+    await events_coll.update_one(
+        {"_id": oid, "user_id": user_id},
+        {"$set": data}
+    )
     logger.info(f"Event edited: {event_id} by {user_id}")
     return {"success": True}
