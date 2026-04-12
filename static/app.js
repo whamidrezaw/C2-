@@ -8,13 +8,24 @@ const TimeManager = (() => {
     loading:   false,
     editingId: null,
     userTZ:    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    view:      "list"   // "list" | "detail"
+    view:      "list"
   };
 
+  // ==================== RENDER SCHEDULER ====================
+  // [E-05] جلوگیری از renderList های اضافه — max یک بار در هر frame
+  let _renderPending = false;
+  function scheduleRender() {
+    if (_renderPending) return;
+    _renderPending = true;
+    requestAnimationFrame(() => {
+      UI.renderList();
+      _renderPending = false;
+    });
+  }
+
   // ==================== JALALI CONVERTER ====================
-  // تبدیل شمسی به میلادی (بدون کتابخانه — pure JS)
+  // [C-04] fromGregorian حذف شد — dead code بود + const reassignment crash
   const Jalali = {
-    // جدول تبدیل ماه‌های شمسی
     _MONTH_DAYS: [31,31,31,31,31,31,30,30,30,30,30,29],
 
     toGregorian(jy, jm, jd) {
@@ -25,7 +36,7 @@ const TimeManager = (() => {
       for (let i = 0; i < jm - 1; i++) days += this._MONTH_DAYS[i];
       days += jd - 1;
       let gy2 = Math.floor(days / 365.2425) + gy;
-      let gd  = days - Math.floor(365.25 * (gy2 - 1))  + 1;
+      let gd  = days - Math.floor(365.25 * (gy2 - 1)) + 1;
       const months = [0,31,28+((gy2%4===0&&gy2%100!==0)||gy2%400===0?1:0),31,30,31,30,31,31,30,31,30,31];
       let gm = 0;
       for (let i = 1; i <= 12; i++) {
@@ -35,45 +46,7 @@ const TimeManager = (() => {
       return `${gy2}-${String(gm).padStart(2,"0")}-${String(gd).padStart(2,"0")}`;
     },
 
-    fromGregorian(gy, gm, gd) {
-      gy = parseInt(gy); gm = parseInt(gm); gd = parseInt(gd);
-      let jy = gy <= 1600 ? 0 : 979;
-      gy -= gy <= 1600 ? 621 : 1600;
-      let gy2 = gm > 2 ? gy + 1 : gy;
-      let days = Math.floor(365.25 * (gy2 + 4716)) + Math.floor(30.6001 * (gm > 2 ? gm - 3 : gm + 9)) + gd - 1524;
-      if (days > 2299160) {
-        let a = Math.floor(days / 36524.25);
-        days += 1 + a - Math.floor(a / 4);
-      }
-      days -= Math.floor(365.25 * (Math.floor((days - 122.1) / 365.25) - 1));
-      days = Math.floor(365.25 * gy) + Math.floor(30.6001 * (gm > 2 ? gm - 2 : gm + 10)) + gd - Math.floor(365.25 * (gy - 1)) - Math.floor(30.6001 * (gm > 2 ? gm - 2 : gm + 10)) + 1;
-      // ساده‌تر:
-      const g_d_no = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
-      const months_g = [0,31,28+((gy%4===0&&gy%100!==0)||gy%400===0?1:0),31,30,31,30,31,31,30,31,30,31];
-      let g_d = g_d_no;
-      for (let i = 1; i < gm; i++) g_d += months_g[i];
-      g_d += gd;
-      const j_d_no = g_d - 79;
-      const j_np = Math.floor(j_d_no / 12053);
-      const j_d2 = j_d_no % 12053;
-      jy += 33 * j_np + 4 * Math.floor(j_d2 / 1461);
-      const j_d3 = j_d2 % 1461;
-      if (j_d3 >= 366) { jy += Math.floor((j_d3 - 1) / 365); }
-      const j_d4 = (j_d3 - 1) % 365;
-      const jMDays = [31,31,31,31,31,31,30,30,30,30,30,29];
-      let jm = 0, jd = 0;
-      for (let i = 0; i < 12; i++) {
-        if (j_d4 < jMDays[i]) { jm = i + 1; jd = j_d4 + 1; break; }
-        else j_d4 -= jMDays[i]; // reassign trick
-      }
-      // fallback ساده‌تر
-      let rem = j_d_no; jy = jy; jm = 0; jd = 0;
-      // استفاده از تابع ثابت‌تر
-      return this._j2(gy, gm, gd);
-    },
-
     _j2(gy, gm, gd) {
-      // الگوریتم ثابت و تست‌شده
       const g_days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31];
       const j_days_in_month = [31,31,31,31,31,31,30,30,30,30,30,29];
       let jy, jm, jd, g_day_no, j_day_no, j_np, i;
@@ -92,19 +65,17 @@ const TimeManager = (() => {
       return `${jy}/${String(jm).padStart(2,"0")}/${String(jd).padStart(2,"0")}`;
     },
 
-    // پارس ورودی شمسی: 1404/01/22 یا 1404-01-22
-parse(str) {
-      // این خط را جایگزین خط قبلی کنید:
-      str = str.trim().replace(/[\.\,\-]/g, "/"); 
-      
+    parse(str) {
+      str = str.trim().replace(/[\.\,\-]/g, "/");
       const parts = str.split("/");
       if (parts.length !== 3) return null;
       const [jy, jm, jd] = parts.map(Number);
       if (!jy || !jm || !jd || jm < 1 || jm > 12 || jd < 1 || jd > 31) return null;
+      // [I-06] فقط سال‌های معتبر شمسی — جلوگیری از قبول تاریخ میلادی
+      if (jy < 1300 || jy > 1500) return null;
       try { return this.toGregorian(jy, jm, jd); } catch { return null; }
     },
 
-    // تبدیل میلادی YYYY-MM-DD به شمسی نمایشی
     display(iso) {
       if (!iso) return "";
       try {
@@ -119,11 +90,11 @@ parse(str) {
     if (!dateIso) return "green";
     const now   = new Date(); now.setHours(0,0,0,0);
     const event = new Date(dateIso + "T00:00:00");
-    const diff  = Math.floor((event - now) / 86400000); // روز
-    if (diff < 0)   return "past";
-    if (diff <= 7)  return "red";
-    if (diff <= 30) return "orange";
-    if (diff <= 182)return "yellow";
+    const diff  = Math.floor((event - now) / 86400000);
+    if (diff < 0)    return "past";
+    if (diff <= 7)   return "red";
+    if (diff <= 30)  return "orange";
+    if (diff <= 182) return "purple"; // [I-01] yellow → purple
     return "green";
   }
 
@@ -132,7 +103,7 @@ parse(str) {
     const now   = new Date(); now.setHours(0,0,0,0);
     const event = new Date(dateIso + "T00:00:00");
     const diff  = Math.floor((event - now) / 86400000);
-    if (diff < 0)  return { days: Math.abs(diff), passed: true };
+    if (diff < 0)   return { days: Math.abs(diff), passed: true };
     if (diff === 0) return { days: 0, today: true };
     const weeks  = Math.floor(diff / 7);
     const months = Math.floor(diff / 30.44);
@@ -141,16 +112,17 @@ parse(str) {
   }
 
   // ==================== API ====================
+  // [C-05] کنترلر جداگانه برای هر endpoint — جلوگیری از race condition
   const API = {
-    _ctrl: null,
+    _controllers: {},
     async request(url, payload = {}) {
-      if (this._ctrl) this._ctrl.abort();
-      this._ctrl = new AbortController();
+      this._controllers[url]?.abort();
+      this._controllers[url] = new AbortController();
       const res = await fetch(url, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ initData: tg.initData, timezone: state.userTZ, ...payload }),
-        signal:  this._ctrl.signal
+        signal:  this._controllers[url].signal
       });
       if (res.status === 429) throw new Error("RATE_LIMIT");
       if (res.status === 403) throw new Error("AUTH_FAILED");
@@ -178,7 +150,16 @@ parse(str) {
     yearly:  { label: "Every Year", icon: "🎂", color: "#e53935" }
   };
 
-  // ==================== UI: LIST ====================
+  // [C-07] whitelist برای notify_status
+  const VALID_STATUSES  = new Set(["pending", "done", "failed", "processing"]);
+  const STATUS_LABELS   = {
+    pending:    "⏳ Waiting",
+    done:       "✅ Sent",
+    failed:     "❌ Failed",
+    processing: "🔄 Sending…"
+  };
+
+  // ==================== UI ====================
   const UI = {
 
     _buildCard(e) {
@@ -187,13 +168,11 @@ parse(str) {
       card.className = `card urgency-${urgency} ${e.optimistic ? "syncing" : ""}`;
       card.dataset.id = e.id;
 
-      // کلیک روی کارت → صفحه جزئیات
       card.addEventListener("click", (ev) => {
         if (ev.target.closest(".card-actions")) return;
         TimeManager.showDetail(e);
       });
 
-      // ردیف بالا
       const topRow = document.createElement("div");
       topRow.className = "card-top";
 
@@ -210,7 +189,6 @@ parse(str) {
       topRow.appendChild(titleEl);
       topRow.appendChild(badge);
 
-      // تاریخ
       const dateRow = document.createElement("div");
       dateRow.className = "card-date-row";
 
@@ -230,24 +208,22 @@ parse(str) {
       dateRow.appendChild(sep);
       dateRow.appendChild(dJ);
 
-      // countdown خلاصه
       const cd = getCountdown(e.date_iso);
       const cdEl = document.createElement("div");
       cdEl.className = "card-countdown";
-      if (cd.today)        cdEl.textContent = "🎉 Today!";
-      else if (cd.passed)  cdEl.textContent = `⌛ ${cd.days} days ago`;
-      else if (cd.days <= 7) cdEl.textContent = `⚡ ${cd.days} days left`;
+      if (cd.today)             cdEl.textContent = "🎉 Today!";
+      else if (cd.passed)       cdEl.textContent = `⌛ ${cd.days} days ago`;
+      else if (cd.days <= 7)    cdEl.textContent = `⚡ ${cd.days} days left`;
       else if (cd.months >= 12) cdEl.textContent = `📆 ~${cd.years} yr${cd.years>1?"s":""} left`;
       else if (cd.months >= 2)  cdEl.textContent = `📆 ~${cd.months} months left`;
       else                      cdEl.textContent = `📆 ${cd.days} days left`;
 
-      // وضعیت
+      // [C-07] whitelist status
+      const safeStatus = VALID_STATUSES.has(e.notify_status) ? e.notify_status : "pending";
       const statusEl = document.createElement("div");
-      statusEl.className = `card-status status-${e.notify_status || "pending"}`;
-      const sMap = { pending:"⏳ Waiting", done:"✅ Sent", failed:"❌ Failed", processing:"🔄 Sending…" };
-      statusEl.textContent = sMap[e.notify_status] || "";
+      statusEl.className = `card-status status-${safeStatus}`;
+      statusEl.textContent = STATUS_LABELS[safeStatus] || "";
 
-      // دکمه‌ها
       const actions = document.createElement("div");
       actions.className = "card-actions";
       if (!e.optimistic) {
@@ -255,12 +231,14 @@ parse(str) {
         editBtn.className = "btn-icon btn-edit";
         editBtn.textContent = "✏️";
         editBtn.title = "Edit";
+        editBtn.setAttribute("aria-label", "Edit event");
         editBtn.onclick = (ev) => { ev.stopPropagation(); TimeManager.startEdit(e); };
 
         const delBtn = document.createElement("button");
         delBtn.className = "btn-icon btn-delete";
         delBtn.textContent = "🗑️";
         delBtn.title = "Delete";
+        delBtn.setAttribute("aria-label", "Delete event");
         delBtn.onclick = (ev) => { ev.stopPropagation(); TimeManager.deleteEvent(e.id); };
 
         actions.appendChild(editBtn);
@@ -291,9 +269,10 @@ parse(str) {
       root.appendChild(frag);
     },
 
-    // ==================== UI: DETAIL ====================
+    // ==================== DETAIL VIEW ====================
+    // [C-06] تمام داده‌های دینامیک با textContent — بدون innerHTML ناامن
     renderDetail(e) {
-      const root = document.getElementById("list");
+      const root    = document.getElementById("list");
       root.innerHTML = "";
 
       const cd      = getCountdown(e.date_iso);
@@ -313,63 +292,110 @@ parse(str) {
       // عنوان
       const title = document.createElement("h2");
       title.className = "detail-title";
-      title.textContent = e.title;
+      title.textContent = e.title; // textContent — XSS safe ✅
 
-      // تاریخ‌ها
+      // تاریخ‌ها — کاملاً با createElement
       const dates = document.createElement("div");
       dates.className = "detail-dates";
-      dates.innerHTML = `
-        <div class="detail-date-item">
-          <span class="detail-label">📅 Gregorian</span>
-          <span class="detail-val">${e.date_iso}</span>
-        </div>
-        <div class="detail-date-item">
-          <span class="detail-label">📅 Jalali</span>
-          <span class="detail-val jalali">${jalali}</span>
-        </div>
-      `;
 
-      // countdown بزرگ
+      const _makeDateItem = (labelText, valueText, valueExtraClass = "") => {
+        const item  = document.createElement("div");
+        item.className = "detail-date-item";
+        const lbl = document.createElement("span");
+        lbl.className = "detail-label";
+        lbl.textContent = labelText;
+        const val = document.createElement("span");
+        val.className = `detail-val${valueExtraClass ? " " + valueExtraClass : ""}`;
+        val.textContent = valueText; // textContent — XSS safe ✅
+        item.appendChild(lbl);
+        item.appendChild(val);
+        return item;
+      };
+
+      dates.appendChild(_makeDateItem("📅 Gregorian", e.date_iso));
+      dates.appendChild(_makeDateItem("📅 Jalali", jalali, "jalali"));
+
+      // Countdown بزرگ
       const cdBox = document.createElement("div");
       cdBox.className = `countdown-box urgency-bg-${urgency}`;
 
       if (cd.today) {
-        cdBox.innerHTML = `<div class="cd-main">🎉</div><div class="cd-label">Today is the day!</div>`;
-      } else if (cd.passed) {
-        cdBox.innerHTML = `
-          <div class="cd-main">${cd.days}</div>
-          <div class="cd-label">days ago</div>
-        `;
-      } else {
-        // ساخت ردیف‌های countdown
-        const rows = [];
-        rows.push(`<div class="cd-row"><span class="cd-num">${cd.days}</span><span class="cd-unit">days</span></div>`);
-        if (cd.weeks > 0)
-          rows.push(`<div class="cd-row"><span class="cd-num">${cd.weeks}</span><span class="cd-unit">weeks</span></div>`);
-        if (cd.months > 0)
-          rows.push(`<div class="cd-row"><span class="cd-num">${cd.months}</span><span class="cd-unit">months</span></div>`);
-        if (cd.years > 0)
-          rows.push(`<div class="cd-row"><span class="cd-num">${cd.years}</span><span class="cd-unit">years</span></div>`);
+        const cdMain = document.createElement("div");
+        cdMain.className = "cd-main";
+        cdMain.textContent = "🎉";
+        const cdLabel = document.createElement("div");
+        cdLabel.className = "cd-label";
+        cdLabel.textContent = "Today is the day!";
+        cdBox.appendChild(cdMain);
+        cdBox.appendChild(cdLabel);
 
-        cdBox.innerHTML = `
-          <div class="cd-title">Time remaining</div>
-          <div class="cd-grid">${rows.join("")}</div>
-        `;
+      } else if (cd.passed) {
+        const cdMain = document.createElement("div");
+        cdMain.className = "cd-main";
+        cdMain.textContent = cd.days;
+        const cdLabel = document.createElement("div");
+        cdLabel.className = "cd-label";
+        cdLabel.textContent = "days ago";
+        cdBox.appendChild(cdMain);
+        cdBox.appendChild(cdLabel);
+
+      } else {
+        const cdTitle = document.createElement("div");
+        cdTitle.className = "cd-title";
+        cdTitle.textContent = "Time remaining";
+
+        const cdGrid = document.createElement("div");
+        cdGrid.className = "cd-grid";
+
+        const _addRow = (num, unit) => {
+          const row    = document.createElement("div");
+          row.className = "cd-row";
+          const numEl  = document.createElement("span");
+          numEl.className = "cd-num";
+          numEl.textContent = num;
+          const unitEl = document.createElement("span");
+          unitEl.className = "cd-unit";
+          unitEl.textContent = unit;
+          row.appendChild(numEl);
+          row.appendChild(unitEl);
+          cdGrid.appendChild(row);
+        };
+
+        _addRow(cd.days, "days");
+        if (cd.weeks  > 0) _addRow(cd.weeks,  "weeks");
+        if (cd.months > 0) _addRow(cd.months, "months");
+        if (cd.years  > 0) _addRow(cd.years,  "years");
+
+        cdBox.appendChild(cdTitle);
+        cdBox.appendChild(cdGrid);
       }
 
-      // اطلاعات تکرار و وضعیت
+      // Meta — [C-07] whitelist برای notify_status
+      const safeStatus = VALID_STATUSES.has(e.notify_status) ? e.notify_status : "pending";
+
       const meta = document.createElement("div");
       meta.className = "detail-meta";
-      meta.innerHTML = `
-        <div class="meta-item">
-          <span>${rc.icon} ${rc.label}</span>
-          <span class="meta-label">Repeat</span>
-        </div>
-        <div class="meta-item">
-          <span class="status-${e.notify_status}">${{pending:"⏳ Waiting",done:"✅ Sent",failed:"❌ Failed",processing:"🔄 Sending"}[e.notify_status]||""}</span>
-          <span class="meta-label">Notification</span>
-        </div>
-      `;
+
+      const _makeMetaItem = (valueEl, labelText) => {
+        const item  = document.createElement("div");
+        item.className = "meta-item";
+        const lbl = document.createElement("span");
+        lbl.className = "meta-label";
+        lbl.textContent = labelText;
+        item.appendChild(valueEl);
+        item.appendChild(lbl);
+        return item;
+      };
+
+      const repeatVal = document.createElement("span");
+      repeatVal.textContent = `${rc.icon} ${rc.label}`;
+
+      const statusVal = document.createElement("span");
+      statusVal.className = `status-${safeStatus}`; // safe — از whitelist آمده ✅
+      statusVal.textContent = STATUS_LABELS[safeStatus] || "";
+
+      meta.appendChild(_makeMetaItem(repeatVal, "Repeat"));
+      meta.appendChild(_makeMetaItem(statusVal, "Notification"));
 
       wrap.appendChild(back);
       wrap.appendChild(title);
@@ -418,7 +444,7 @@ parse(str) {
 
   // ==================== INPUT JALALI SYNC ====================
   function _syncJalaliToGregorian(jalaliStr) {
-    const iso = Jalali.parse(jalaliStr);
+    const iso    = Jalali.parse(jalaliStr);
     const dateEl = document.getElementById("date");
     if (iso && dateEl) {
       dateEl.value = iso;
@@ -446,19 +472,47 @@ parse(str) {
       this._applyTheme();
       tg.onEvent("themeChanged", () => this._applyTheme());
 
-      // sync تاریخ شمسی ↔ میلادی
+      // cache DOM refs
       const jalaliInput = document.getElementById("date-jalali");
       const gregInput   = document.getElementById("date");
+      const addBtn      = document.getElementById("addBtn");
+      const cancelBtn   = document.getElementById("cancelBtn");
+      const titleEl     = document.getElementById("title");
+      const repeatEl    = document.getElementById("repeat");
 
+      // [I-08] debounce 350ms روی input شمسی
+      let _jalaliDbt;
       if (jalaliInput) {
-        jalaliInput.addEventListener("input", () => _syncJalaliToGregorian(jalaliInput.value));
+        jalaliInput.addEventListener("input", () => {
+          clearTimeout(_jalaliDbt);
+          _jalaliDbt = setTimeout(() => _syncJalaliToGregorian(jalaliInput.value), 350);
+        });
       }
+
       if (gregInput) {
         gregInput.addEventListener("change", () => _syncGregorianToJalali(gregInput.value));
       }
 
+      // [E-04] event listener به‌جای onclick inline در HTML
+      if (addBtn) {
+        addBtn.addEventListener("click", () => {
+          this.add(titleEl.value, gregInput.value, repeatEl.value);
+        });
+      }
+
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => this.cancelEdit());
+      }
+
+      // Enter key برای submit
+      if (titleEl) {
+        titleEl.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") this.add(titleEl.value, gregInput.value, repeatEl.value);
+        });
+      }
+
       state.events = Cache.load();
-      UI.renderList();
+      scheduleRender();
       this.sync();
     },
 
@@ -473,13 +527,16 @@ parse(str) {
 
     async sync() {
       state.loading = true;
-      UI.renderList();
+      scheduleRender(); // [E-05] به‌جای renderList مستقیم
       try {
         const res = await API.request("/api/list", {});
         if (res.success) { state.events = res.targets; Cache.save(state.events); }
-      } catch (e) { if (e.message !== "AbortError") console.warn("Sync:", e.message); }
+      } catch (e) {
+        // [I-05] e.name به‌جای e.message
+        if (e.name !== "AbortError") console.warn("Sync:", e.message);
+      }
       state.loading = false;
-      UI.renderList();
+      scheduleRender(); // [E-05]
     },
 
     showDetail(e) {
@@ -492,7 +549,7 @@ parse(str) {
     showList() {
       state.view = "list";
       document.querySelector(".input-container").style.display = "flex";
-      UI.renderList();
+      scheduleRender(); // [E-05]
     },
 
     async add(title, date, repeat) {
@@ -506,19 +563,33 @@ parse(str) {
 
       if (state.editingId) return this.saveEdit(title, date, repeat);
 
+      // [I-07] disable دکمه حین ارسال — جلوگیری از double-submit
+      const addBtn = document.getElementById("addBtn");
+      addBtn.disabled = true;
+
       const tempId = "tmp_" + Date.now();
-      state.events.unshift({ id: tempId, title, date_iso: date, date_jalali: Jalali.display(date), repeat, optimistic: true, notify_status: "pending" });
-      UI.renderList();
+      state.events.unshift({
+        id: tempId, title, date_iso: date,
+        date_jalali: Jalali.display(date),
+        repeat, optimistic: true, notify_status: "pending"
+      });
+      scheduleRender(); // [E-05]
       tg.HapticFeedback.impactOccurred("medium");
 
       try {
         const res = await API.request("/api/add", { title, date, repeat });
-        if (res.success) { UI.setEditMode(null); UI.showToast("✅ Added!"); await this.sync(); }
+        if (res.success) {
+          UI.setEditMode(null);
+          UI.showToast("✅ Added!");
+          await this.sync();
+        }
       } catch (e) {
         state.events = state.events.filter(ev => ev.id !== tempId);
-        UI.renderList();
+        scheduleRender(); // [E-05]
         tg.HapticFeedback.notificationOccurred("error");
         UI.showToast(e.message === "RATE_LIMIT" ? "⚠️ Too many requests." : "❌ Failed.", "error");
+      } finally {
+        addBtn.disabled = false; // [I-07] همیشه re-enable می‌شود
       }
     },
 
@@ -534,30 +605,47 @@ parse(str) {
     async saveEdit(title, date, repeat) {
       const eventId = state.editingId;
       if (!eventId) return;
+
+      // [I-07] disable دکمه حین ارسال
+      const addBtn = document.getElementById("addBtn");
+      addBtn.disabled = true;
       tg.HapticFeedback.impactOccurred("medium");
+
       try {
         const res = await API.request("/api/edit", { event_id: eventId, title, date, repeat });
-        if (res.success) { UI.setEditMode(null); UI.showToast("✅ Updated!"); await this.sync(); }
-      } catch { tg.HapticFeedback.notificationOccurred("error"); UI.showToast("❌ Failed.", "error"); }
+        if (res.success) {
+          UI.setEditMode(null);
+          UI.showToast("✅ Updated!");
+          await this.sync();
+        }
+      } catch {
+        tg.HapticFeedback.notificationOccurred("error");
+        UI.showToast("❌ Failed.", "error");
+      } finally {
+        addBtn.disabled = false; // [I-07]
+      }
     },
 
     deleteEvent(eventId) {
       tg.showPopup({
         title: "Delete", message: "Delete this event?",
-        buttons: [{ id:"yes", type:"destructive", text:"Delete" }, { id:"no", type:"cancel" }]
+        buttons: [
+          { id: "yes", type: "destructive", text: "Delete" },
+          { id: "no",  type: "cancel" }
+        ]
       }, async (btn) => {
         if (btn !== "yes") return;
         tg.HapticFeedback.notificationOccurred("warning");
         const backup = [...state.events];
         state.events = state.events.filter(e => e.id !== eventId);
-        UI.renderList();
+        scheduleRender(); // [E-05]
         try {
           await API.request("/api/delete", { event_id: eventId });
           Cache.save(state.events);
           UI.showToast("🗑️ Deleted.");
         } catch {
           state.events = backup;
-          UI.renderList();
+          scheduleRender(); // [E-05]
           UI.showToast("❌ Failed.", "error");
         }
       });
