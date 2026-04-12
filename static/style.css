@@ -16,44 +16,42 @@
   --radius-sm:    10px;
   --radius-md:    16px;
   --transition:   0.2s ease;
-
-  /* [E-02] ارتفاع input-container به‌عنوان variable
-     body padding و toast position هر دو از این استفاده می‌کنند */
   --input-height: 260px;
 
-  /* urgency colors */
-  --color-red:    #e53935;
-  --color-orange: #fb8c00;
-  /* [I-01] yellow → purple */
-  --color-purple: #a333ec;
-  --color-green:  #388e3c;
-  --color-past:   #9e9e9e;
+  --color-red:     #d62828;
+  --color-crimson: #e5484d;
+  --color-orange:  #f57c00;
+  --color-amber:   #ffb300;
+  --color-lime:    #7cb342;
+  --color-green:   #2e7d32;
+  --color-past:    #121212;
 
-  --color-red-bg:    rgba(229,57,53,0.08);
-  --color-orange-bg: rgba(251,140,0,0.08);
-  /* [I-01] yellow-bg → purple-bg */
-  --color-purple-bg: rgba(163,51,236,0.08);
-  --color-green-bg:  rgba(56,142,60,0.08);
-  --color-past-bg:   rgba(158,158,158,0.08);
+  --color-red-bg:     rgba(214,40,40,0.10);
+  --color-crimson-bg: rgba(229,72,77,0.10);
+  --color-orange-bg:  rgba(245,124,0,0.10);
+  --color-amber-bg:   rgba(255,179,0,0.12);
+  --color-lime-bg:    rgba(124,179,66,0.12);
+  --color-green-bg:   rgba(46,125,50,0.10);
+  --color-past-bg:    rgba(18,18,18,0.07);
 }
 
 [data-theme="dark"] {
-  --bg:       #1c1c1e;
-  --surface:  #2c2c2e;
-  --surface2: #3a3a3c;
-  --text:     #f0f0f0;
-  --hint:     #8e8e93;
-  --border:   rgba(255,255,255,0.08);
+  --bg:        #1c1c1e;
+  --surface:   #2c2c2e;
+  --surface2:  #3a3a3c;
+  --text:      #f0f0f0;
+  --hint:      #8e8e93;
+  --border:    rgba(255,255,255,0.08);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.45);
 
-  --color-red-bg:    rgba(229,57,53,0.15);
-  --color-orange-bg: rgba(251,140,0,0.15);
-  /* [I-01] dark mode — purple-bg */
-  --color-purple-bg: rgba(163,51,236,0.15);
-  --color-green-bg:  rgba(56,142,60,0.15);
-  /* [E-01] past-bg در dark mode اضافه شد */
-  --color-past-bg:   rgba(158,158,158,0.12);
+  --color-red-bg:     rgba(214,40,40,0.18);
+  --color-crimson-bg: rgba(229,72,77,0.18);
+  --color-orange-bg:  rgba(245,124,0,0.18);
+  --color-amber-bg:   rgba(255,179,0,0.18);
+  --color-lime-bg:    rgba(124,179,66,0.18);
+  --color-green-bg:   rgba(46,125,50,0.18);
+  --color-past-bg:    rgba(0,0,0,0.30);
 }
 
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -61,10 +59,10 @@ html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background:  var(--bg);
-  color:       var(--text);
-  margin: 0; padding: 0;
-  /* [E-02] از variable استفاده می‌کند — نه عدد ثابت */
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
   padding-bottom: var(--input-height);
   min-height: 100vh;
 }
@@ -104,20 +102,19 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* رنگ‌بندی بر اساس فاصله زمانی */
-.urgency-red    { border-color: var(--color-red);    background: var(--color-red-bg);    }
-.urgency-orange { border-color: var(--color-orange); background: var(--color-orange-bg); }
-/* [I-01] urgency-yellow → urgency-purple */
-.urgency-purple { border-color: var(--color-purple); background: var(--color-purple-bg); }
-.urgency-green  { border-color: var(--color-green);  background: var(--color-green-bg);  }
-.urgency-past   { border-color: var(--color-past);   background: var(--color-past-bg); opacity: 0.7; }
+.urgency-red     { border-color: var(--color-red);     background: var(--color-red-bg); }
+.urgency-crimson { border-color: var(--color-crimson); background: var(--color-crimson-bg); }
+.urgency-orange  { border-color: var(--color-orange);  background: var(--color-orange-bg); }
+.urgency-amber   { border-color: var(--color-amber);   background: var(--color-amber-bg); }
+.urgency-lime    { border-color: var(--color-lime);    background: var(--color-lime-bg); }
+.urgency-green   { border-color: var(--color-green);   background: var(--color-green-bg); }
+.urgency-past    { border-color: var(--color-past);    background: var(--color-past-bg); }
 
 .card.syncing { opacity: 0.5; border-style: dashed; }
 
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .card-title { font-size: 1rem; font-weight: 700; flex: 1; word-break: break-word; }
 
-/* Badge تکرار */
 .repeat-badge {
   font-size: 0.72rem; font-weight: 600;
   padding: 3px 8px; border-radius: 100px;
@@ -141,8 +138,8 @@ body {
 .card-status  { font-size: 0.75rem; font-weight: 500; }
 .status-pending    { color: var(--warning); }
 .status-done       { color: var(--success); }
-.status-failed     { color: var(--danger);  }
-.status-processing { color: var(--accent);  }
+.status-failed     { color: var(--danger); }
+.status-processing { color: var(--accent); }
 
 .card-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
@@ -154,7 +151,7 @@ body {
 }
 .btn-icon:active  { transform: scale(0.91); }
 .btn-edit:hover   { background: rgba(51,144,236,0.10); }
-.btn-delete:hover { background: rgba(229,57,53,0.10);  }
+.btn-delete:hover { background: rgba(229,57,53,0.10); }
 
 /* ==================== DETAIL PAGE ==================== */
 .detail-wrap {
@@ -190,7 +187,6 @@ body {
 .detail-val   { font-size: 0.95rem; font-weight: 600; }
 .detail-val.jalali { direction: rtl; }
 
-/* Countdown بزرگ */
 .countdown-box {
   border-radius: var(--radius-md);
   padding: 24px 16px;
@@ -199,12 +195,13 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.urgency-bg-red    { background: var(--color-red-bg);    border: 2px solid var(--color-red);    }
-.urgency-bg-orange { background: var(--color-orange-bg); border: 2px solid var(--color-orange); }
-/* [I-01] urgency-bg-yellow → urgency-bg-purple */
-.urgency-bg-purple { background: var(--color-purple-bg); border: 2px solid var(--color-purple); }
-.urgency-bg-green  { background: var(--color-green-bg);  border: 2px solid var(--color-green);  }
-.urgency-bg-past   { background: var(--color-past-bg);   border: 2px solid var(--color-past);   }
+.urgency-bg-red     { background: var(--color-red-bg);     border: 2px solid var(--color-red); }
+.urgency-bg-crimson { background: var(--color-crimson-bg); border: 2px solid var(--color-crimson); }
+.urgency-bg-orange  { background: var(--color-orange-bg);  border: 2px solid var(--color-orange); }
+.urgency-bg-amber   { background: var(--color-amber-bg);   border: 2px solid var(--color-amber); }
+.urgency-bg-lime    { background: var(--color-lime-bg);    border: 2px solid var(--color-lime); }
+.urgency-bg-green   { background: var(--color-green-bg);   border: 2px solid var(--color-green); }
+.urgency-bg-past    { background: var(--color-past-bg);    border: 2px solid var(--color-past); }
 
 .cd-title { font-size: 0.85rem; color: var(--hint); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
 .cd-main  { font-size: 4rem; font-weight: 900; line-height: 1; }
@@ -224,7 +221,6 @@ body {
 .cd-num  { font-size: 2.4rem; font-weight: 900; line-height: 1; color: var(--text); }
 .cd-unit { font-size: 0.78rem; color: var(--hint); text-transform: uppercase; letter-spacing: 0.04em; }
 
-/* Meta */
 .detail-meta {
   background: var(--surface);
   border-radius: var(--radius-md);
@@ -260,7 +256,6 @@ body {
   z-index: 200;
 }
 
-/* ردیف دو تاریخ */
 .date-row {
   display: flex; gap: 8px;
 }
@@ -327,7 +322,6 @@ input:focus, .repeat-select:focus {
 /* ==================== TOAST ==================== */
 .toast {
   position: fixed;
-  /* [E-02] از variable استفاده می‌کند — هماهنگ با body padding */
   bottom: calc(var(--input-height) + 10px);
   left: 50%;
   transform: translateX(-50%) translateY(16px);
@@ -341,4 +335,4 @@ input:focus, .repeat-select:focus {
 }
 .toast.show          { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.toast-success { background: var(--success); }
-.toast.toast-error   { background: var(--danger);  }
+.toast.toast-error   { background: var(--danger); }
