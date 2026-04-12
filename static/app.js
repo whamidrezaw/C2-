@@ -1,7 +1,23 @@
 "use strict";
 
 const TimeManager = (() => {
-  const tg = window.Telegram.WebApp;
+  const tg = window.Telegram?.WebApp || {
+    initData: "",
+    colorScheme: "light",
+    themeParams: {},
+    expand() {},
+    ready() {},
+    onEvent() {},
+    switchInlineQuery() {},
+    showPopup(config, cb) {
+      const ok = window.confirm(config?.message || "Are you sure?");
+      cb(ok ? "yes" : "no");
+    },
+    HapticFeedback: {
+      impactOccurred() {},
+      notificationOccurred() {}
+    }
+  };
 
   const state = {
     events: [],
@@ -10,6 +26,51 @@ const TimeManager = (() => {
     userTZ: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     view: "list",
     detailId: null
+  };
+
+  const REPEAT_CONFIG = {
+    none: { label: "One-time", icon: "⏰", color: "#8a8a8a" },
+    daily: { label: "Daily", icon: "🔁", color: "#3390ec" },
+    weekly: { label: "Weekly", icon: "🔁", color: "#7b61ff" },
+    monthly: { label: "Monthly", icon: "🔁", color: "#fb8c00" },
+    yearly: { label: "Every Year", icon: "🎂", color: "#e53935" }
+  };
+
+  const CATEGORY_CONFIG = {
+    general: { label: "General", icon: "🏷️" },
+    birthday: { label: "Birthday", icon: "🎂" },
+    work: { label: "Work", icon: "💼" },
+    family: { label: "Family", icon: "👨‍👩‍👧" },
+    health: { label: "Health", icon: "🩺" },
+    travel: { label: "Travel", icon: "✈️" },
+    finance: { label: "Finance", icon: "💰" },
+    study: { label: "Study", icon: "📚" },
+    other: { label: "Other", icon: "📌" }
+  };
+
+  const VALID_STATUSES = new Set(["pending", "done", "failed", "processing"]);
+  const STATUS_LABELS = {
+    pending: "⏳ Waiting",
+    done: "✅ Sent",
+    failed: "❌ Failed",
+    processing: "🔄 Sending…"
+  };
+
+  const Cache = {
+    KEY: "tm_events_v5",
+    save(data) {
+      try {
+        localStorage.setItem(this.KEY, JSON.stringify(data));
+      } catch {}
+    },
+    load() {
+      try {
+        const raw = localStorage.getItem(this.KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
   };
 
   let _renderPending = false;
@@ -51,31 +112,21 @@ const TimeManager = (() => {
   function _parseIsoParts(s) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "").trim());
     if (!m) return null;
-    return {
-      y: Number(m[1]),
-      m: Number(m[2]),
-      d: Number(m[3])
-    };
+    return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
   }
 
   function _validateDate(s) {
     const p = _parseIsoParts(s);
     if (!p) return false;
     const dt = new Date(p.y, p.m - 1, p.d);
-    return dt.getFullYear() === p.y &&
-           dt.getMonth() === p.m - 1 &&
-           dt.getDate() === p.d;
+    return dt.getFullYear() === p.y && dt.getMonth() === p.m - 1 && dt.getDate() === p.d;
   }
 
   function _dateFromIsoLocal(dateIso) {
     const p = _parseIsoParts(dateIso);
     if (!p) return null;
-
     const dt = new Date(p.y, p.m - 1, p.d);
-    if (dt.getFullYear() !== p.y || dt.getMonth() !== p.m - 1 || dt.getDate() !== p.d) {
-      return null;
-    }
-
+    if (dt.getFullYear() !== p.y || dt.getMonth() !== p.m - 1 || dt.getDate() !== p.d) return null;
     dt.setHours(0, 0, 0, 0);
     return dt;
   }
@@ -98,8 +149,45 @@ const TimeManager = (() => {
     const lastDay = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
     shifted.setDate(Math.min(d, lastDay));
     shifted.setHours(0, 0, 0, 0);
-
     return shifted;
+  }
+
+  function _sortEvents(arr) {
+    return [...arr].sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+      const ad = _dateFromIsoLocal(a.date_iso);
+      const bd = _dateFromIsoLocal(b.date_iso);
+      if (!ad && !bd) return 0;
+      if (!ad) return 1;
+      if (!bd) return -1;
+      return ad - bd;
+    });
+  }
+
+  function _getEventById(id) {
+    return state.events.find(e => e.id === id) || null;
+  }
+
+  function _updateEventInState(id, patch) {
+    let changed = false;
+    state.events = state.events.map(event => {
+      if (event.id !== id) return event;
+      changed = true;
+      return { ...event, ...patch };
+    });
+    if (changed) {
+      state.events = _sortEvents(state.events);
+      Cache.save(state.events);
+    }
+    return changed;
+  }
+
+  function _safeCategory(value) {
+    return CATEGORY_CONFIG[value] ? value : "general";
+  }
+
+  function _safeRepeat(value) {
+    return REPEAT_CONFIG[value] ? value : "none";
   }
 
   function _countdownPartsToArray(cd) {
@@ -126,8 +214,6 @@ const TimeManager = (() => {
   }
 
   const Jalali = {
-    _MONTH_DAYS: [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29],
-
     toGregorian(jy, jm, jd) {
       jy = parseInt(jy, 10);
       jm = parseInt(jm, 10);
@@ -142,7 +228,7 @@ const TimeManager = (() => {
       }
 
       let days =
-        (365 * jy) +
+        365 * jy +
         Math.floor(jy / 33) * 8 +
         Math.floor(((jy % 33) + 3) / 4) +
         78 +
@@ -167,13 +253,7 @@ const TimeManager = (() => {
       }
 
       let gd = days + 1;
-      const sal_a = [
-        0,
-        31,
-        ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28,
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-      ];
-
+      const sal_a = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
       let gm = 1;
       while (gm <= 12 && gd > sal_a[gm]) {
         gd -= sal_a[gm];
@@ -184,48 +264,35 @@ const TimeManager = (() => {
     },
 
     _j2(gy, gm, gd) {
-      const g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-      const j_days_in_month = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
-      let jy, jm, jd, g_day_no, j_day_no, j_np, i;
+      const gDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      const jDays = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
+      let jy, jm, jd, gDayNo, jDayNo, jNp, i;
 
       gy -= 1600;
       gm -= 1;
       gd -= 1;
-
-      g_day_no = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
-
-      for (i = 0; i < gm; ++i) g_day_no += g_days_in_month[i];
-
-      if (gm > 1 && ((gy + 1600) % 4 === 0 && ((gy + 1600) % 100 !== 0 || (gy + 1600) % 400 === 0))) {
-        ++g_day_no;
+      gDayNo = 365 * gy + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400);
+      for (i = 0; i < gm; ++i) gDayNo += gDays[i];
+      if (gm > 1 && ((gy + 1600) % 4 === 0 && ((gy + 1600) % 100 !== 0 || (gy + 1600) % 400 === 0))) ++gDayNo;
+      gDayNo += gd;
+      jDayNo = gDayNo - 79;
+      jNp = Math.floor(jDayNo / 12053);
+      jDayNo %= 12053;
+      jy = 979 + 33 * jNp + 4 * Math.floor(jDayNo / 1461);
+      jDayNo %= 1461;
+      if (jDayNo >= 366) {
+        jy += Math.floor((jDayNo - 1) / 365);
+        jDayNo = (jDayNo - 1) % 365;
       }
-
-      g_day_no += gd;
-      j_day_no = g_day_no - 79;
-      j_np = Math.floor(j_day_no / 12053);
-      j_day_no %= 12053;
-      jy = 979 + 33 * j_np + 4 * Math.floor(j_day_no / 1461);
-      j_day_no %= 1461;
-
-      if (j_day_no >= 366) {
-        jy += Math.floor((j_day_no - 1) / 365);
-        j_day_no = (j_day_no - 1) % 365;
-      }
-
-      for (i = 0; i < 11 && j_day_no >= j_days_in_month[i]; ++i) {
-        j_day_no -= j_days_in_month[i];
-      }
-
+      for (i = 0; i < 11 && jDayNo >= jDays[i]; ++i) jDayNo -= jDays[i];
       jm = i + 1;
-      jd = j_day_no + 1;
-
+      jd = jDayNo + 1;
       return `${jy}/${String(jm).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
     },
 
     parse(str) {
       const normalized = autoFormatJalaliInput(str);
       if (!normalized) return null;
-
       const parts = normalized.split("/");
       if (parts.length !== 3) return null;
 
@@ -240,11 +307,9 @@ const TimeManager = (() => {
       try {
         const iso = this.toGregorian(jy, jm, jd);
         if (!_validateDate(iso)) return null;
-
         const roundTrip = this._j2(...iso.split("-").map(Number));
         const expected = `${jy}/${String(jm).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
         if (roundTrip !== expected) return null;
-
         return iso;
       } catch {
         return null;
@@ -264,13 +329,10 @@ const TimeManager = (() => {
 
   function getUrgency(dateIso) {
     if (!dateIso) return "green";
-
     const now = _todayLocal();
     const event = _dateFromIsoLocal(dateIso);
     if (!event) return "green";
-
     const diff = _diffDays(now, event);
-
     if (diff < 0) return "past";
     if (diff <= 7) return "red";
     if (diff <= 30) return "crimson";
@@ -285,86 +347,45 @@ const TimeManager = (() => {
     const event = _dateFromIsoLocal(dateIso);
 
     if (!event) {
-      return {
-        invalid: true,
-        passed: false,
-        today: false,
-        totalDays: 0,
-        years: 0,
-        months: 0,
-        weeks: 0,
-        days: 0
-      };
+      return { invalid: true, passed: false, today: false, totalDays: 0, years: 0, months: 0, weeks: 0, days: 0 };
     }
 
     const totalDiff = _diffDays(today, event);
-
     if (totalDiff < 0) {
-      return {
-        passed: true,
-        today: false,
-        totalDays: Math.abs(totalDiff),
-        years: 0,
-        months: 0,
-        weeks: 0,
-        days: 0
-      };
+      return { passed: true, today: false, totalDays: Math.abs(totalDiff), years: 0, months: 0, weeks: 0, days: 0 };
     }
-
     if (totalDiff === 0) {
-      return {
-        passed: false,
-        today: true,
-        totalDays: 0,
-        years: 0,
-        months: 0,
-        weeks: 0,
-        days: 0
-      };
+      return { passed: false, today: true, totalDays: 0, years: 0, months: 0, weeks: 0, days: 0 };
     }
 
     let years = event.getFullYear() - today.getFullYear();
     if (years < 0) years = 0;
-
     let cursor = _shiftDate(today, years, 0);
     if (cursor > event) {
-      years--;
+      years -= 1;
       cursor = _shiftDate(today, years, 0);
     }
 
-    let months =
-      (event.getFullYear() - cursor.getFullYear()) * 12 +
-      (event.getMonth() - cursor.getMonth());
-
+    let months = (event.getFullYear() - cursor.getFullYear()) * 12 + (event.getMonth() - cursor.getMonth());
     if (months < 0) months = 0;
-
     let monthCursor = _shiftDate(cursor, 0, months);
     if (monthCursor > event) {
-      months--;
+      months -= 1;
       monthCursor = _shiftDate(cursor, 0, months);
     }
 
     cursor = monthCursor;
-
     const remainingDays = _diffDays(cursor, event);
     const weeks = Math.floor(remainingDays / 7);
     const days = remainingDays % 7;
 
-    return {
-      passed: false,
-      today: false,
-      totalDays: totalDiff,
-      years,
-      months,
-      weeks,
-      days
-    };
+    return { passed: false, today: false, totalDays: totalDiff, years, months, weeks, days };
   }
 
   const API = {
     _controllers: {},
     async request(url, payload = {}) {
-      this._controllers[url]?.abort();
+      this._controllers[url]?.abort?.();
       this._controllers[url] = new AbortController();
 
       const res = await fetch(url, {
@@ -377,101 +398,76 @@ const TimeManager = (() => {
       if (res.status === 429) throw new Error("RATE_LIMIT");
       if (res.status === 403) throw new Error("AUTH_FAILED");
       if (!res.ok) throw new Error("API_ERROR");
-
       return res.json();
     }
   };
 
-  const Cache = {
-    KEY: "tm_events_v4",
-    save(d) { try { localStorage.setItem(this.KEY, JSON.stringify(d)); } catch {} },
-    load() {
-      try {
-        const r = localStorage.getItem(this.KEY);
-        return r ? JSON.parse(r) : [];
-      } catch {
-        localStorage.removeItem(this.KEY);
-        return [];
-      }
-    }
-  };
-
-  const REPEAT_CONFIG = {
-    none: { label: "One-time", icon: "⏰", color: "#8a8a8a" },
-    daily: { label: "Daily", icon: "🔁", color: "#3390ec" },
-    weekly: { label: "Weekly", icon: "🔁", color: "#7b61ff" },
-    monthly: { label: "Monthly", icon: "🔁", color: "#fb8c00" },
-    yearly: { label: "Every Year", icon: "🎂", color: "#e53935" }
-  };
-
-  const VALID_STATUSES = new Set(["pending", "done", "failed", "processing"]);
-  const STATUS_LABELS = {
-    pending: "⏳ Waiting",
-    done: "✅ Sent",
-    failed: "❌ Failed",
-    processing: "🔄 Sending…"
-  };
-
   const UI = {
-    _buildCard(e) {
-      const urgency = getUrgency(e.date_iso);
-      const card = document.createElement("div");
-      card.className = `card urgency-${urgency} ${e.optimistic ? "syncing" : ""}`;
-      card.dataset.id = e.id;
+    _buildCard(event) {
+      const urgency = getUrgency(event.date_iso);
+      const repeat = REPEAT_CONFIG[_safeRepeat(event.repeat)] || REPEAT_CONFIG.none;
+      const categoryKey = _safeCategory(event.category);
+      const category = CATEGORY_CONFIG[categoryKey];
+      const countdown = getCountdown(event.date_iso);
+      const safeStatus = VALID_STATUSES.has(event.notify_status) ? event.notify_status : "pending";
 
+      const card = document.createElement("div");
+      card.className = `card urgency-${urgency} ${event.optimistic ? "syncing" : ""}`;
+      card.dataset.id = event.id;
       card.addEventListener("click", (ev) => {
         if (ev.target.closest(".card-actions")) return;
-        TimeManager.showDetail(e);
+        TimeManager.showDetail(event);
       });
 
-      const topRow = document.createElement("div");
-      topRow.className = "card-top";
+      const top = document.createElement("div");
+      top.className = "card-top";
 
-      const titleEl = document.createElement("div");
-      titleEl.className = "card-title";
-      titleEl.textContent = e.title;
+      const title = document.createElement("div");
+      title.className = "card-title";
+      title.textContent = `${event.pinned ? "📌 " : ""}${event.title}`;
 
-      const rc = REPEAT_CONFIG[e.repeat] || REPEAT_CONFIG.none;
-      const badge = document.createElement("span");
-      badge.className = "repeat-badge";
-      badge.textContent = `${rc.icon} ${rc.label}`;
-      badge.style.setProperty("--badge-color", rc.color);
+      const badgeWrap = document.createElement("div");
+      badgeWrap.style.display = "flex";
+      badgeWrap.style.gap = "6px";
+      badgeWrap.style.flexWrap = "wrap";
+      badgeWrap.style.justifyContent = "flex-end";
 
-      topRow.appendChild(titleEl);
-      topRow.appendChild(badge);
+      const repeatBadge = document.createElement("span");
+      repeatBadge.className = "repeat-badge";
+      repeatBadge.textContent = `${repeat.icon} ${repeat.label}`;
+      repeatBadge.style.setProperty("--badge-color", repeat.color);
+
+      const categoryBadge = document.createElement("span");
+      categoryBadge.className = "repeat-badge";
+      categoryBadge.textContent = `${category.icon} ${category.label}`;
+      categoryBadge.style.setProperty("--badge-color", "#607d8b");
+
+      badgeWrap.appendChild(categoryBadge);
+      badgeWrap.appendChild(repeatBadge);
+      top.appendChild(title);
+      top.appendChild(badgeWrap);
 
       const dateRow = document.createElement("div");
       dateRow.className = "card-date-row";
-
       const dG = document.createElement("span");
       dG.className = "card-date";
-      dG.textContent = e.date_iso || "";
-
+      dG.textContent = event.date_iso || "";
       const sep = document.createElement("span");
       sep.className = "date-sep";
       sep.textContent = " • ";
-
       const dJ = document.createElement("span");
       dJ.className = "card-date jalali";
-      dJ.textContent = e.date_jalali || Jalali.display(e.date_iso);
-
+      dJ.textContent = event.date_jalali || Jalali.display(event.date_iso);
       dateRow.appendChild(dG);
       dateRow.appendChild(sep);
       dateRow.appendChild(dJ);
 
-      const cd = getCountdown(e.date_iso);
       const cdEl = document.createElement("div");
       cdEl.className = "card-countdown";
+      if (countdown.today) cdEl.textContent = "🎉 Today!";
+      else if (countdown.passed) cdEl.textContent = `⌛ ${formatCountdownShort(countdown)}`;
+      else cdEl.textContent = `⏳ ${formatCountdownShort(countdown)} left`;
 
-      if (cd.today) {
-        cdEl.textContent = "🎉 Today!";
-      } else if (cd.passed) {
-        cdEl.textContent = `⌛ ${formatCountdownShort(cd)}`;
-      } else {
-        cdEl.textContent = `⏳ ${formatCountdownShort(cd)} left`;
-      }
-
-      const safeStatus = VALID_STATUSES.has(e.notify_status) ? e.notify_status : "pending";
       const statusEl = document.createElement("div");
       statusEl.className = `card-status status-${safeStatus}`;
       statusEl.textContent = STATUS_LABELS[safeStatus] || "";
@@ -479,238 +475,279 @@ const TimeManager = (() => {
       const actions = document.createElement("div");
       actions.className = "card-actions";
 
-      if (!e.optimistic) {
+      if (!event.optimistic) {
         const editBtn = document.createElement("button");
         editBtn.className = "btn-icon btn-edit";
+        editBtn.type = "button";
         editBtn.textContent = "✏️";
-        editBtn.title = "Edit";
         editBtn.setAttribute("aria-label", "Edit event");
-        editBtn.onclick = (ev) => {
+        editBtn.onclick = ev => {
           ev.stopPropagation();
-          TimeManager.startEdit(e);
+          TimeManager.startEdit(event);
         };
 
         const delBtn = document.createElement("button");
         delBtn.className = "btn-icon btn-delete";
+        delBtn.type = "button";
         delBtn.textContent = "🗑️";
-        delBtn.title = "Delete";
         delBtn.setAttribute("aria-label", "Delete event");
-        delBtn.onclick = (ev) => {
+        delBtn.onclick = ev => {
           ev.stopPropagation();
-          TimeManager.deleteEvent(e.id);
+          TimeManager.deleteEvent(event.id);
         };
 
         actions.appendChild(editBtn);
         actions.appendChild(delBtn);
       }
 
-      card.appendChild(topRow);
+      card.appendChild(top);
       card.appendChild(dateRow);
       card.appendChild(cdEl);
+      statusEl.style.marginTop = "2px";
       card.appendChild(statusEl);
+      if (event.note) {
+        const notePreview = document.createElement("div");
+        notePreview.className = "card-date";
+        notePreview.textContent = `📝 ${event.note.slice(0, 80)}${event.note.length > 80 ? "…" : ""}`;
+        card.appendChild(notePreview);
+      }
       card.appendChild(actions);
       return card;
     },
 
     renderList() {
       const root = document.getElementById("list");
+      if (!root) return;
       root.innerHTML = "";
 
       if (state.loading && state.events.length === 0) {
         root.innerHTML = '<div class="loader"><span class="spinner"></span> Syncing…</div>';
         return;
       }
-
       if (state.events.length === 0) {
         root.innerHTML = '<div class="empty">📅 No events yet.<br><small>Add one below!</small></div>';
         return;
       }
 
       const frag = document.createDocumentFragment();
-      state.events.forEach(e => frag.appendChild(this._buildCard(e)));
+      _sortEvents(state.events).forEach(event => frag.appendChild(this._buildCard(event)));
       root.appendChild(frag);
     },
 
-    renderDetail(e) {
+    renderDetail(event) {
       const root = document.getElementById("list");
+      if (!root) return;
       root.innerHTML = "";
 
-      const cd = getCountdown(e.date_iso);
-      const urgency = getUrgency(e.date_iso);
-      const rc = REPEAT_CONFIG[e.repeat] || REPEAT_CONFIG.none;
-      const jalali = e.date_jalali || Jalali.display(e.date_iso);
+      const countdown = getCountdown(event.date_iso);
+      const urgency = getUrgency(event.date_iso);
+      const repeat = REPEAT_CONFIG[_safeRepeat(event.repeat)] || REPEAT_CONFIG.none;
+      const category = CATEGORY_CONFIG[_safeCategory(event.category)];
+      const safeStatus = VALID_STATUSES.has(event.notify_status) ? event.notify_status : "pending";
+      const jalali = event.date_jalali || Jalali.display(event.date_iso);
 
       const wrap = document.createElement("div");
       wrap.className = "detail-wrap";
 
       const back = document.createElement("button");
       back.className = "btn-back";
+      back.type = "button";
       back.textContent = "← Back";
       back.onclick = () => TimeManager.showList();
 
       const title = document.createElement("h2");
       title.className = "detail-title";
-      title.textContent = e.title;
+      title.textContent = `${event.pinned ? "📌 " : ""}${event.title}`;
 
       const dates = document.createElement("div");
       dates.className = "detail-dates";
 
-      const _makeDateItem = (labelText, valueText, valueExtraClass = "") => {
+      const makeDateItem = (labelText, valueText, valueExtraClass = "") => {
         const item = document.createElement("div");
         item.className = "detail-date-item";
-
         const lbl = document.createElement("span");
         lbl.className = "detail-label";
         lbl.textContent = labelText;
-
         const val = document.createElement("span");
         val.className = `detail-val${valueExtraClass ? " " + valueExtraClass : ""}`;
         val.textContent = valueText;
-
         item.appendChild(lbl);
         item.appendChild(val);
         return item;
       };
 
-      dates.appendChild(_makeDateItem("📅 Gregorian", e.date_iso));
-      dates.appendChild(_makeDateItem("📅 Jalali", jalali, "jalali"));
+      dates.appendChild(makeDateItem("📅 Gregorian", event.date_iso));
+      dates.appendChild(makeDateItem("📅 Jalali", jalali, "jalali"));
 
       const cdBox = document.createElement("div");
       cdBox.className = `countdown-box urgency-bg-${urgency}`;
-
-      if (cd.today) {
+      if (countdown.today) {
         const cdMain = document.createElement("div");
         cdMain.className = "cd-main";
         cdMain.textContent = "🎉";
-
         const cdLabel = document.createElement("div");
         cdLabel.className = "cd-label";
         cdLabel.textContent = "Today is the day!";
-
         cdBox.appendChild(cdMain);
         cdBox.appendChild(cdLabel);
-      } else if (cd.passed) {
+      } else if (countdown.passed) {
         const cdMain = document.createElement("div");
         cdMain.className = "cd-main";
-        cdMain.textContent = cd.totalDays;
-
+        cdMain.textContent = countdown.totalDays;
         const cdLabel = document.createElement("div");
         cdLabel.className = "cd-label";
         cdLabel.textContent = "days ago";
-
         cdBox.appendChild(cdMain);
         cdBox.appendChild(cdLabel);
       } else {
         const cdTitle = document.createElement("div");
         cdTitle.className = "cd-title";
         cdTitle.textContent = "Time remaining";
-
         const cdGrid = document.createElement("div");
         cdGrid.className = "cd-grid";
-
-        const _addRow = (num, unit) => {
+        const addRow = (num, unit) => {
           const row = document.createElement("div");
           row.className = "cd-row";
-
           const numEl = document.createElement("span");
           numEl.className = "cd-num";
           numEl.textContent = num;
-
           const unitEl = document.createElement("span");
           unitEl.className = "cd-unit";
           unitEl.textContent = unit;
-
           row.appendChild(numEl);
           row.appendChild(unitEl);
           cdGrid.appendChild(row);
         };
-
-        if (cd.years > 0) _addRow(cd.years, "years");
-        if (cd.months > 0) _addRow(cd.months, "months");
-        if (cd.weeks > 0) _addRow(cd.weeks, "weeks");
-        if (cd.days > 0) _addRow(cd.days, "days");
-        if (cd.years === 0 && cd.months === 0 && cd.weeks === 0 && cd.days === 0) _addRow(0, "days");
-
+        if (countdown.years > 0) addRow(countdown.years, "years");
+        if (countdown.months > 0) addRow(countdown.months, "months");
+        if (countdown.weeks > 0) addRow(countdown.weeks, "weeks");
+        if (countdown.days > 0) addRow(countdown.days, "days");
+        if (!countdown.years && !countdown.months && !countdown.weeks && !countdown.days) addRow(0, "days");
         const cdLabel = document.createElement("div");
         cdLabel.className = "cd-label";
-        cdLabel.textContent = formatCountdownLong(cd);
-
+        cdLabel.textContent = formatCountdownLong(countdown);
         cdBox.appendChild(cdTitle);
         cdBox.appendChild(cdGrid);
         cdBox.appendChild(cdLabel);
       }
 
-      const safeStatus = VALID_STATUSES.has(e.notify_status) ? e.notify_status : "pending";
-
       const meta = document.createElement("div");
       meta.className = "detail-meta";
-
-      const _makeMetaItem = (valueEl, labelText) => {
+      const makeMetaItem = (valueText, labelText, valueClass = "") => {
         const item = document.createElement("div");
         item.className = "meta-item";
-
+        const value = document.createElement("span");
+        value.className = valueClass;
+        value.textContent = valueText;
         const lbl = document.createElement("span");
         lbl.className = "meta-label";
         lbl.textContent = labelText;
-
-        item.appendChild(valueEl);
+        item.appendChild(value);
         item.appendChild(lbl);
         return item;
       };
-
-      const repeatVal = document.createElement("span");
-      repeatVal.textContent = `${rc.icon} ${rc.label}`;
-
-      const statusVal = document.createElement("span");
-      statusVal.className = `status-${safeStatus}`;
-      statusVal.textContent = STATUS_LABELS[safeStatus] || "";
-
-      meta.appendChild(_makeMetaItem(repeatVal, "Repeat"));
-      meta.appendChild(_makeMetaItem(statusVal, "Notification"));
+      meta.appendChild(makeMetaItem(`${repeat.icon} ${repeat.label}`, "Repeat"));
+      meta.appendChild(makeMetaItem(`${category.icon} ${category.label}`, "Category"));
+      meta.appendChild(makeMetaItem(event.pinned ? "📌 Pinned" : "—", "Pin"));
+      meta.appendChild(makeMetaItem(STATUS_LABELS[safeStatus] || "", "Notification", `status-${safeStatus}`));
 
       wrap.appendChild(back);
       wrap.appendChild(title);
       wrap.appendChild(dates);
       wrap.appendChild(cdBox);
       wrap.appendChild(meta);
+
+      const tpl = document.getElementById("detailExtrasTemplate");
+      if (tpl?.content) {
+        const frag = tpl.content.cloneNode(true);
+        const shareBtn = frag.querySelector('[data-action="share"]');
+        const pinBtn = frag.querySelector('[data-action="pin"]');
+        const noteInput = frag.querySelector("#detail-note");
+        const noteSaveBtn = frag.querySelector("#noteSaveBtn");
+        const noteCancelBtn = frag.querySelector("#noteCancelBtn");
+        const noteSection = frag.querySelector(".detail-notes");
+
+        if (shareBtn) {
+          shareBtn.textContent = "🔥 Share";
+          shareBtn.onclick = () => TimeManager.shareEvent(event.id);
+        }
+        if (pinBtn) {
+          pinBtn.textContent = event.pinned ? "📌 Unpin" : "📌 Pin";
+          pinBtn.onclick = () => TimeManager.togglePin(event.id, !event.pinned);
+        }
+        if (noteInput) {
+          noteInput.value = event.note || "";
+          const counter = document.createElement("div");
+          counter.className = "meta-label";
+          counter.style.marginTop = "8px";
+          const renderCount = () => {
+            counter.textContent = `${noteInput.value.length}/2000`;
+            if (noteSaveBtn) noteSaveBtn.disabled = noteInput.value === (event.note || "");
+          };
+          noteInput.addEventListener("input", renderCount);
+          renderCount();
+          noteSection?.appendChild(counter);
+        }
+        if (noteSaveBtn && noteInput) {
+          noteSaveBtn.onclick = () => TimeManager.saveNote(event.id, noteInput.value);
+        }
+        if (noteCancelBtn && noteInput) {
+          noteCancelBtn.onclick = () => {
+            noteInput.value = event.note || "";
+            noteInput.dispatchEvent(new Event("input"));
+          };
+        }
+        wrap.appendChild(frag);
+      }
+
       root.appendChild(wrap);
     },
 
-    showToast(msg, type = "success") {
-      let t = document.getElementById("toast");
-      if (!t) {
-        t = document.createElement("div");
-        t.id = "toast";
-        document.body.appendChild(t);
+    showToast(message, type = "success") {
+      let toast = document.getElementById("toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "toast";
+        document.body.appendChild(toast);
       }
-      t.textContent = msg;
-      t.className = `toast toast-${type} show`;
-      clearTimeout(t._tid);
-      t._tid = setTimeout(() => t.classList.remove("show"), 2800);
+      toast.textContent = message;
+      toast.className = `toast toast-${type} show`;
+      clearTimeout(toast._tid);
+      toast._tid = setTimeout(() => toast.classList.remove("show"), 2800);
     },
 
     setEditMode(event = null) {
+      const form = document.getElementById("eventForm");
       const titleEl = document.getElementById("title");
       const dateEl = document.getElementById("date");
       const jalaliEl = document.getElementById("date-jalali");
       const repeatEl = document.getElementById("repeat");
+      const categoryEl = document.getElementById("category");
+      const pinEl = document.getElementById("pin");
       const addBtn = document.getElementById("addBtn");
       const cancelBtn = document.getElementById("cancelBtn");
 
+      if (!titleEl || !dateEl || !repeatEl || !categoryEl || !pinEl || !addBtn || !cancelBtn) return;
+
       if (event) {
-        titleEl.value = event.title;
-        dateEl.value = event.date_iso;
+        titleEl.value = event.title || "";
+        dateEl.value = event.date_iso || "";
         if (jalaliEl) jalaliEl.value = event.date_jalali || Jalali.display(event.date_iso);
-        if (repeatEl) repeatEl.value = event.repeat || "none";
+        repeatEl.value = _safeRepeat(event.repeat);
+        categoryEl.value = _safeCategory(event.category);
+        pinEl.checked = Boolean(event.pinned);
         addBtn.textContent = "💾 Save";
         cancelBtn.style.display = "block";
-        titleEl.focus();
         state.editingId = event.id;
+        form?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        titleEl.focus();
       } else {
         titleEl.value = "";
         dateEl.value = "";
         if (jalaliEl) jalaliEl.value = "";
-        if (repeatEl) repeatEl.value = "none";
+        repeatEl.value = "none";
+        categoryEl.value = "general";
+        pinEl.checked = false;
         addBtn.textContent = "＋ Add";
         cancelBtn.style.display = "none";
         state.editingId = null;
@@ -731,9 +768,7 @@ const TimeManager = (() => {
     }
 
     const formatted = autoFormatJalaliInput(raw);
-    if (jalaliEl && jalaliEl.value !== formatted) {
-      jalaliEl.value = formatted;
-    }
+    if (jalaliEl && jalaliEl.value !== formatted) jalaliEl.value = formatted;
 
     const iso = Jalali.parse(formatted);
     if (iso) {
@@ -749,67 +784,78 @@ const TimeManager = (() => {
   function _syncGregorianToJalali(isoStr) {
     const jalaliEl = document.getElementById("date-jalali");
     const dateEl = document.getElementById("date");
-
     if (jalaliEl) {
       jalaliEl.value = isoStr ? Jalali.display(isoStr) : "";
       jalaliEl.style.borderColor = "";
     }
+    if (dateEl) dateEl.style.borderColor = "";
+  }
 
-    if (dateEl) {
-      dateEl.style.borderColor = "";
-    }
+  function _buildShareText(event) {
+    const category = CATEGORY_CONFIG[_safeCategory(event.category)];
+    const countdown = getCountdown(event.date_iso);
+    const timeLine = countdown.today
+      ? "Today!"
+      : countdown.passed
+        ? `${countdown.totalDays} day${countdown.totalDays > 1 ? "s" : ""} ago`
+        : `${formatCountdownShort(countdown)} left`;
+
+    return [
+      `${event.pinned ? "📌 " : ""}${event.title}`,
+      `📅 ${event.date_iso} • ${event.date_jalali || Jalali.display(event.date_iso)}`,
+      `${category.icon} ${category.label}`,
+      `⏳ ${timeLine}`,
+      event.note ? `📝 ${event.note}` : ""
+    ].filter(Boolean).join("\n");
   }
 
   return {
     init() {
-      tg.expand();
-      tg.ready();
+      tg.expand?.();
+      tg.ready?.();
       this._applyTheme();
-      tg.onEvent("themeChanged", () => this._applyTheme());
+      tg.onEvent?.("themeChanged", () => this._applyTheme());
 
-      const jalaliInput = document.getElementById("date-jalali");
-      const gregInput = document.getElementById("date");
+      const form = document.getElementById("eventForm");
+      const titleEl = document.getElementById("title");
+      const dateEl = document.getElementById("date");
+      const jalaliEl = document.getElementById("date-jalali");
+      const repeatEl = document.getElementById("repeat");
+      const categoryEl = document.getElementById("category");
+      const pinEl = document.getElementById("pin");
       const addBtn = document.getElementById("addBtn");
       const cancelBtn = document.getElementById("cancelBtn");
-      const titleEl = document.getElementById("title");
-      const repeatEl = document.getElementById("repeat");
 
-      let _jalaliDbt;
-      if (jalaliInput) {
-        jalaliInput.addEventListener("input", () => {
-          const formatted = autoFormatJalaliInput(jalaliInput.value);
-          if (formatted !== jalaliInput.value) {
-            jalaliInput.value = formatted;
-          }
-
-          clearTimeout(_jalaliDbt);
-          _jalaliDbt = setTimeout(() => _syncJalaliToGregorian(jalaliInput.value), 250);
+      let jalaliDebounce;
+      if (jalaliEl) {
+        jalaliEl.addEventListener("input", () => {
+          const formatted = autoFormatJalaliInput(jalaliEl.value);
+          if (formatted !== jalaliEl.value) jalaliEl.value = formatted;
+          clearTimeout(jalaliDebounce);
+          jalaliDebounce = setTimeout(() => _syncJalaliToGregorian(jalaliEl.value), 250);
         });
       }
-
-      if (gregInput) {
-        gregInput.addEventListener("change", () => {
-          _syncGregorianToJalali(gregInput.value);
+      if (dateEl) dateEl.addEventListener("change", () => _syncGregorianToJalali(dateEl.value));
+      if (form) {
+        form.addEventListener("submit", ev => {
+          ev.preventDefault();
+          this.add(titleEl?.value, dateEl?.value, repeatEl?.value, categoryEl?.value, pinEl?.checked);
         });
       }
-
-      if (addBtn) {
-        addBtn.addEventListener("click", () => {
-          this.add(titleEl.value, gregInput.value, repeatEl.value);
-        });
+      if (addBtn && !form) {
+        addBtn.addEventListener("click", () => this.add(titleEl?.value, dateEl?.value, repeatEl?.value, categoryEl?.value, pinEl?.checked));
       }
-
-      if (cancelBtn) {
-        cancelBtn.addEventListener("click", () => this.cancelEdit());
-      }
-
+      if (cancelBtn) cancelBtn.addEventListener("click", () => this.cancelEdit());
       if (titleEl) {
-        titleEl.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") this.add(titleEl.value, gregInput.value, repeatEl.value);
+        titleEl.addEventListener("keydown", ev => {
+          if (ev.key === "Enter" && !ev.shiftKey) {
+            ev.preventDefault();
+            this.add(titleEl.value, dateEl?.value, repeatEl?.value, categoryEl?.value, pinEl?.checked);
+          }
         });
       }
 
-      state.events = Cache.load();
+      state.events = _sortEvents(Cache.load());
       scheduleRender();
       this.sync();
     },
@@ -829,11 +875,12 @@ const TimeManager = (() => {
       try {
         const res = await API.request("/api/list", {});
         if (res.success) {
-          state.events = res.targets;
+          state.events = _sortEvents(res.targets || []);
           Cache.save(state.events);
           if (state.view === "detail" && state.detailId) {
-            const current = state.events.find(ev => ev.id === state.detailId);
+            const current = _getEventById(state.detailId);
             if (current) UI.renderDetail(current);
+            else this.showList();
           }
         }
       } catch (e) {
@@ -843,59 +890,59 @@ const TimeManager = (() => {
       scheduleRender();
     },
 
-    showDetail(e) {
+    showDetail(event) {
       state.view = "detail";
-      state.detailId = e.id;
-      document.querySelector(".input-container").style.display = "none";
-      UI.renderDetail(e);
-      tg.HapticFeedback.impactOccurred("light");
+      state.detailId = event.id;
+      const form = document.querySelector(".input-container");
+      if (form) form.style.display = "none";
+      UI.renderDetail(event);
+      tg.HapticFeedback?.impactOccurred?.("light");
     },
 
     showList() {
       state.view = "list";
       state.detailId = null;
-      document.querySelector(".input-container").style.display = "flex";
+      const form = document.querySelector(".input-container");
+      if (form) form.style.display = "flex";
       scheduleRender();
     },
 
-    async add(title, date, repeat) {
-      title = (title || "").trim();
-      date = (date || "").trim();
-      repeat = (repeat || "none").trim();
+    async add(title, date, repeat, category, pinned) {
+      title = String(title || "").trim();
+      date = String(date || "").trim();
+      repeat = _safeRepeat(repeat);
+      category = _safeCategory(category);
+      pinned = Boolean(pinned);
 
-      if (!title) {
-        UI.showToast("⚠️ Enter a title.", "error");
-        return;
-      }
-      if (!_validateDate(date)) {
-        UI.showToast("⚠️ Invalid date.", "error");
-        return;
-      }
-      if (title.length > 200) {
-        UI.showToast("⚠️ Title too long.", "error");
-        return;
-      }
-
-      if (state.editingId) return this.saveEdit(title, date, repeat);
+      if (!title) return UI.showToast("⚠️ Enter a title.", "error");
+      if (!_validateDate(date)) return UI.showToast("⚠️ Invalid date.", "error");
+      if (title.length > 200) return UI.showToast("⚠️ Title too long.", "error");
+      if (state.editingId) return this.saveEdit(title, date, repeat, category, pinned);
 
       const addBtn = document.getElementById("addBtn");
-      addBtn.disabled = true;
+      if (addBtn) addBtn.disabled = true;
 
-      const tempId = "tmp_" + Date.now();
-      state.events.unshift({
-        id: tempId,
-        title,
-        date_iso: date,
-        date_jalali: Jalali.display(date),
-        repeat,
-        optimistic: true,
-        notify_status: "pending"
-      });
+      const tempId = `tmp_${Date.now()}`;
+      state.events = _sortEvents([
+        {
+          id: tempId,
+          title,
+          date_iso: date,
+          date_jalali: Jalali.display(date),
+          repeat,
+          category,
+          pinned,
+          note: "",
+          optimistic: true,
+          notify_status: "pending"
+        },
+        ...state.events
+      ]);
       scheduleRender();
-      tg.HapticFeedback.impactOccurred("medium");
+      tg.HapticFeedback?.impactOccurred?.("medium");
 
       try {
-        const res = await API.request("/api/add", { title, date, repeat });
+        const res = await API.request("/api/add", { title, date, repeat, category, pinned, note: "" });
         if (res.success) {
           UI.setEditMode(null);
           UI.showToast("✅ Added!");
@@ -904,75 +951,154 @@ const TimeManager = (() => {
       } catch (e) {
         state.events = state.events.filter(ev => ev.id !== tempId);
         scheduleRender();
-        tg.HapticFeedback.notificationOccurred("error");
+        tg.HapticFeedback?.notificationOccurred?.("error");
         UI.showToast(e.message === "RATE_LIMIT" ? "⚠️ Too many requests." : "❌ Failed.", "error");
       } finally {
-        addBtn.disabled = false;
+        if (addBtn) addBtn.disabled = false;
       }
     },
 
     startEdit(event) {
       this.showList();
       UI.setEditMode(event);
-      tg.HapticFeedback.impactOccurred("light");
-      document.querySelector(".input-container").scrollIntoView({ behavior: "smooth" });
+      tg.HapticFeedback?.impactOccurred?.("light");
     },
 
     cancelEdit() {
       UI.setEditMode(null);
-      tg.HapticFeedback.impactOccurred("light");
+      tg.HapticFeedback?.impactOccurred?.("light");
     },
 
-    async saveEdit(title, date, repeat) {
+    async saveEdit(title, date, repeat, category, pinned) {
       const eventId = state.editingId;
       if (!eventId) return;
-
+      const existing = _getEventById(eventId);
+      const note = existing?.note || "";
       const addBtn = document.getElementById("addBtn");
-      addBtn.disabled = true;
-      tg.HapticFeedback.impactOccurred("medium");
+      if (addBtn) addBtn.disabled = true;
+      tg.HapticFeedback?.impactOccurred?.("medium");
 
       try {
-        const res = await API.request("/api/edit", { event_id: eventId, title, date, repeat });
+        const res = await API.request("/api/edit", { event_id: eventId, title, date, repeat, category, pinned, note });
         if (res.success) {
           UI.setEditMode(null);
           UI.showToast("✅ Updated!");
           await this.sync();
         }
       } catch {
-        tg.HapticFeedback.notificationOccurred("error");
+        tg.HapticFeedback?.notificationOccurred?.("error");
         UI.showToast("❌ Failed.", "error");
       } finally {
-        addBtn.disabled = false;
+        if (addBtn) addBtn.disabled = false;
       }
     },
 
     deleteEvent(eventId) {
-      tg.showPopup({
-        title: "Delete",
-        message: "Delete this event?",
-        buttons: [
-          { id: "yes", type: "destructive", text: "Delete" },
-          { id: "no", type: "cancel" }
-        ]
-      }, async (btn) => {
-        if (btn !== "yes") return;
-        tg.HapticFeedback.notificationOccurred("warning");
-
-        const backup = [...state.events];
-        state.events = state.events.filter(e => e.id !== eventId);
-        scheduleRender();
-
-        try {
-          await API.request("/api/delete", { event_id: eventId });
-          Cache.save(state.events);
-          UI.showToast("🗑️ Deleted.");
-          if (state.detailId === eventId) this.showList();
-        } catch {
-          state.events = backup;
+      tg.showPopup(
+        {
+          title: "Delete",
+          message: "Delete this event?",
+          buttons: [
+            { id: "yes", type: "destructive", text: "Delete" },
+            { id: "no", type: "cancel" }
+          ]
+        },
+        async btn => {
+          if (btn !== "yes") return;
+          const backup = [...state.events];
+          state.events = state.events.filter(e => e.id !== eventId);
           scheduleRender();
-          UI.showToast("❌ Failed.", "error");
+          try {
+            await API.request("/api/delete", { event_id: eventId });
+            Cache.save(state.events);
+            UI.showToast("🗑️ Deleted.");
+            if (state.detailId === eventId) this.showList();
+          } catch {
+            state.events = backup;
+            scheduleRender();
+            UI.showToast("❌ Failed.", "error");
+          }
         }
-      });
+      );
+    },
+
+    async saveNote(eventId, note) {
+      note = String(note || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+      if (note.length > 2000) return UI.showToast("⚠️ Note is too long.", "error");
+
+      const existing = _getEventById(eventId);
+      if (!existing) return;
+      const prevNote = existing.note || "";
+      if (prevNote === note) return UI.showToast("ℹ️ No changes to save.", "success");
+
+      _updateEventInState(eventId, { note });
+      if (state.view === "detail" && state.detailId === eventId) UI.renderDetail(_getEventById(eventId));
+      tg.HapticFeedback?.impactOccurred?.("light");
+
+      try {
+        const res = await API.request("/api/note", { event_id: eventId, note });
+        if (res.success) {
+          UI.showToast("📝 Note saved.");
+        }
+      } catch {
+        _updateEventInState(eventId, { note: prevNote });
+        if (state.view === "detail" && state.detailId === eventId) UI.renderDetail(_getEventById(eventId));
+        UI.showToast("❌ Note save failed.", "error");
+      }
+    },
+
+    async togglePin(eventId, forcedValue = null) {
+      const existing = _getEventById(eventId);
+      if (!existing) return;
+      const nextPinned = typeof forcedValue === "boolean" ? forcedValue : !Boolean(existing.pinned);
+      const prevPinned = Boolean(existing.pinned);
+
+      _updateEventInState(eventId, { pinned: nextPinned });
+      scheduleRender();
+      if (state.view === "detail" && state.detailId === eventId) UI.renderDetail(_getEventById(eventId));
+      tg.HapticFeedback?.impactOccurred?.("medium");
+
+      try {
+        const res = await API.request("/api/pin", { event_id: eventId, pinned: nextPinned });
+        if (res.success) UI.showToast(nextPinned ? "📌 Pinned." : "📍 Unpinned.");
+      } catch {
+        _updateEventInState(eventId, { pinned: prevPinned });
+        scheduleRender();
+        if (state.view === "detail" && state.detailId === eventId) UI.renderDetail(_getEventById(eventId));
+        UI.showToast("❌ Pin update failed.", "error");
+      }
+    },
+
+    async shareEvent(eventId) {
+      const event = _getEventById(eventId);
+      if (!event) return;
+      const shareText = _buildShareText(event);
+
+      try {
+        if (typeof tg.switchInlineQuery === "function") {
+          tg.switchInlineQuery(shareText, ["users", "groups", "channels"]);
+          UI.showToast("🚀 Share mode opened.");
+          return;
+        }
+      } catch {}
+
+      try {
+        if (navigator.share) {
+          await navigator.share({ text: shareText, title: event.title });
+          UI.showToast("🚀 Shared.");
+          return;
+        }
+      } catch {}
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareText);
+          UI.showToast("📋 Copied to clipboard.");
+          return;
+        }
+      } catch {}
+
+      UI.showToast("⚠️ Share not available.", "error");
     }
   };
 })();
