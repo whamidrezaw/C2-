@@ -26,6 +26,7 @@ const TimeManager = (() => {
     userTZ: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     view: "list",
     detailId: null
+    composerOpen: false
   };
 
   const REPEAT_CONFIG = {
@@ -82,6 +83,55 @@ const TimeManager = (() => {
       _renderPending = false;
     });
   }
+
+function _els() {
+  return {
+    sheet: document.getElementById("composerSheet"),
+    overlay: document.getElementById("composerOverlay"),
+    openBtn: document.getElementById("openComposerBtn")
+  };
+}
+
+function _pushAppState(mode) {
+  history.pushState({ tmMode: mode, t: Date.now() }, "");
+}
+
+function _openComposer(push = true) {
+  const { sheet, overlay, openBtn } = _els();
+  if (!sheet || !overlay) return;
+
+  state.composerOpen = true;
+  sheet.hidden = false;
+  overlay.hidden = false;
+  sheet.classList.add("open");
+  overlay.classList.add("open");
+  sheet.setAttribute("aria-hidden", "false");
+  if (openBtn) openBtn.style.display = "inline-flex";
+  if (openBtn) openBtn.style.display = "none";
+
+  if (push) _pushAppState("composer");
+
+  const titleEl = document.getElementById("title");
+  setTimeout(() => titleEl?.focus(), 120);
+}
+
+function _closeComposer(reset = false) {
+  const { sheet, overlay, openBtn } = _els();
+  if (!sheet || !overlay) return;
+
+  state.composerOpen = false;
+  sheet.classList.remove("open");
+  overlay.classList.remove("open");
+  sheet.setAttribute("aria-hidden", "true");
+  if (openBtn) openBtn.style.display = "inline-flex";
+
+  setTimeout(() => {
+    overlay.hidden = true;
+    if (!state.composerOpen) sheet.hidden = true;
+  }, 220);
+
+  if (reset) UI.setEditMode(null);
+}
 
   function normalizeDigits(str) {
     return String(str || "")
@@ -549,11 +599,7 @@ const TimeManager = (() => {
       const wrap = document.createElement("div");
       wrap.className = "detail-wrap";
 
-      const back = document.createElement("button");
-      back.className = "btn-back";
-      back.type = "button";
-      back.textContent = "← Back";
-      back.onclick = () => TimeManager.showList();
+
 
       const title = document.createElement("h2");
       title.className = "detail-title";
@@ -651,7 +697,7 @@ const TimeManager = (() => {
       meta.appendChild(makeMetaItem(event.pinned ? "📌 Pinned" : "—", "Pin"));
       meta.appendChild(makeMetaItem(STATUS_LABELS[safeStatus] || "", "Notification", `status-${safeStatus}`));
 
-      wrap.appendChild(back);
+
       wrap.appendChild(title);
       wrap.appendChild(dates);
       wrap.appendChild(cdBox);
@@ -825,7 +871,9 @@ const TimeManager = (() => {
       const pinEl = document.getElementById("pin");
       const addBtn = document.getElementById("addBtn");
       const cancelBtn = document.getElementById("cancelBtn");
-
+      const openComposerBtn = document.getElementById("openComposerBtn");
+      const composerOverlay = document.getElementById("composerOverlay");
+      
       let jalaliDebounce;
       if (jalaliEl) {
         jalaliEl.addEventListener("input", () => {
@@ -890,22 +938,21 @@ const TimeManager = (() => {
       scheduleRender();
     },
 
-    showDetail(event) {
-      state.view = "detail";
-      state.detailId = event.id;
-      const form = document.querySelector(".input-container");
-      if (form) form.style.display = "none";
-      UI.renderDetail(event);
-      tg.HapticFeedback?.impactOccurred?.("light");
-    },
+showDetail(event, push = true) {
+  state.view = "detail";
+  state.detailId = event.id;
+  _closeComposer(false);
+  UI.renderDetail(event);
+  if (push) _pushAppState("detail");
+  tg.HapticFeedback?.impactOccurred?.("light");
+},
 
-    showList() {
-      state.view = "list";
-      state.detailId = null;
-      const form = document.querySelector(".input-container");
-      if (form) form.style.display = "flex";
-      scheduleRender();
-    },
+showList(push = false) {
+  state.view = "list";
+  state.detailId = null;
+  scheduleRender();
+  if (push) _pushAppState("list");
+},
 
     async add(title, date, repeat, category, pinned) {
       title = String(title || "").trim();
@@ -945,6 +992,7 @@ const TimeManager = (() => {
         const res = await API.request("/api/add", { title, date, repeat, category, pinned, note: "" });
         if (res.success) {
           UI.setEditMode(null);
+          _closeComposer(true);
           UI.showToast("✅ Added!");
           await this.sync();
         }
@@ -958,16 +1006,17 @@ const TimeManager = (() => {
       }
     },
 
-    startEdit(event) {
-      this.showList();
-      UI.setEditMode(event);
-      tg.HapticFeedback?.impactOccurred?.("light");
-    },
+startEdit(event) {
+  UI.setEditMode(event);
+  _openComposer(true);
+  tg.HapticFeedback?.impactOccurred?.("light");
+},
 
-    cancelEdit() {
-      UI.setEditMode(null);
-      tg.HapticFeedback?.impactOccurred?.("light");
-    },
+cancelEdit() {
+  UI.setEditMode(null);
+  _closeComposer(false);
+  tg.HapticFeedback?.impactOccurred?.("light");
+},
 
     async saveEdit(title, date, repeat, category, pinned) {
       const eventId = state.editingId;
@@ -982,6 +1031,7 @@ const TimeManager = (() => {
         const res = await API.request("/api/edit", { event_id: eventId, title, date, repeat, category, pinned, note });
         if (res.success) {
           UI.setEditMode(null);
+          _closeComposer(true);
           UI.showToast("✅ Updated!");
           await this.sync();
         }
