@@ -18,7 +18,6 @@
   --radius-lg:    20px;
   --transition:   0.2s ease;
 
-
   --color-red:     #d62828;
   --color-crimson: #e5484d;
   --color-orange:  #f57c00;
@@ -27,13 +26,16 @@
   --color-green:   #2e7d32;
   --color-past:    #121212;
 
-  --color-red-bg:     rgba(214, 40, 40, 0.10);
-  --color-crimson-bg: rgba(229, 72, 77, 0.10);
-  --color-orange-bg:  rgba(245, 124, 0, 0.10);
-  --color-amber-bg:   rgba(255, 179, 0, 0.12);
-  --color-lime-bg:    rgba(124, 179, 66, 0.12);
-  --color-green-bg:   rgba(46, 125, 50, 0.10);
-  --color-past-bg:    rgba(18, 18, 18, 0.07);
+  --color-red-bg:     rgba(214, 40, 40, 0.08);
+  --color-crimson-bg: rgba(229, 72, 77, 0.08);
+  --color-orange-bg:  rgba(245, 124, 0, 0.08);
+  --color-amber-bg:   rgba(255, 179, 0, 0.09);
+  --color-lime-bg:    rgba(124, 179, 66, 0.09);
+  --color-green-bg:   rgba(46, 125, 50, 0.08);
+  --color-past-bg:    rgba(18, 18, 18, 0.05);
+
+  --accent-soft:      rgba(51, 144, 236, 0.08);
+  --badge-soft:       rgba(138, 138, 138, 0.12);
 }
 
 [data-theme="dark"] {
@@ -45,14 +47,18 @@
   --border:    rgba(255, 255, 255, 0.10);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --color-past: #8e8e93;
 
-  --color-red-bg:     rgba(214, 40, 40, 0.18);
-  --color-crimson-bg: rgba(229, 72, 77, 0.18);
-  --color-orange-bg:  rgba(245, 124, 0, 0.18);
-  --color-amber-bg:   rgba(255, 179, 0, 0.18);
-  --color-lime-bg:    rgba(124, 179, 66, 0.18);
-  --color-green-bg:   rgba(46, 125, 50, 0.18);
-  --color-past-bg:    rgba(0, 0, 0, 0.30);
+  --color-red-bg:     rgba(214, 40, 40, 0.14);
+  --color-crimson-bg: rgba(229, 72, 77, 0.14);
+  --color-orange-bg:  rgba(245, 124, 0, 0.14);
+  --color-amber-bg:   rgba(255, 179, 0, 0.14);
+  --color-lime-bg:    rgba(124, 179, 66, 0.14);
+  --color-green-bg:   rgba(46, 125, 50, 0.14);
+  --color-past-bg:    rgba(255, 255, 255, 0.06);
+
+  --accent-soft:      rgba(51, 144, 236, 0.14);
+  --badge-soft:       rgba(255, 255, 255, 0.08);
 }
 
 /* ==================== GLOBAL ==================== */
@@ -64,6 +70,7 @@
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -72,7 +79,7 @@ body {
   color: var(--text);
   margin: 0;
   padding: 0;
-  padding-bottom: 96px;
+  padding-bottom: calc(88px + env(safe-area-inset-bottom));
   min-height: 100vh;
 }
 
@@ -91,7 +98,12 @@ button,
 input,
 select,
 textarea {
-  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition), transform var(--transition), opacity var(--transition);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background var(--transition),
+    transform var(--transition),
+    opacity var(--transition);
 }
 
 :focus-visible {
@@ -187,6 +199,8 @@ textarea {
   opacity: 0;
   pointer-events: none;
   transition: transform var(--transition), opacity var(--transition);
+  max-height: 88vh;
+  overflow: auto;
 }
 
 .composer-sheet.open {
@@ -215,22 +229,18 @@ textarea {
   border-radius: var(--radius-md);
   padding: 14px 16px;
   margin-bottom: 10px;
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 6px;
   animation: slideIn 0.22s ease;
   cursor: pointer;
-  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition), background var(--transition);
 }
 
 .card:active {
   transform: scale(0.985);
-}
-
-.card:hover {
-  box-shadow: var(--shadow-md);
 }
 
 @keyframes slideIn {
@@ -271,6 +281,7 @@ textarea {
   font-weight: 700;
   padding: 4px 9px;
   border-radius: 999px;
+  background: var(--badge-soft);
   background: color-mix(in srgb, var(--badge-color, #8a8a8a) 15%, transparent);
   color: var(--badge-color, #8a8a8a);
   white-space: nowrap;
@@ -330,7 +341,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 6px 11px;
-  min-height: 40px;
+  min-height: 44px;
   font-size: 1rem;
   color: var(--text);
 }
@@ -339,21 +350,11 @@ textarea {
   transform: scale(0.93);
 }
 
-.btn-edit:hover {
-  background: rgba(51, 144, 236, 0.10);
-}
-
-.btn-delete:hover {
-  background: rgba(229, 57, 53, 0.10);
-}
-
 /* ==================== DETAIL PAGE ==================== */
 .detail-wrap {
-  padding: 0 4px 20px;
+  padding: 0 14px 20px;
   animation: slideIn 0.2s ease;
 }
-
-
 
 .detail-title {
   font-size: 1.4rem;
@@ -406,13 +407,13 @@ textarea {
   box-shadow: var(--shadow-sm);
 }
 
-.urgency-bg-red     { background: var(--color-red-bg);     border: 2px solid var(--color-red); }
-.urgency-bg-crimson { background: var(--color-crimson-bg); border: 2px solid var(--color-crimson); }
-.urgency-bg-orange  { background: var(--color-orange-bg);  border: 2px solid var(--color-orange); }
-.urgency-bg-amber   { background: var(--color-amber-bg);   border: 2px solid var(--color-amber); }
-.urgency-bg-lime    { background: var(--color-lime-bg);    border: 2px solid var(--color-lime); }
-.urgency-bg-green   { background: var(--color-green-bg);   border: 2px solid var(--color-green); }
-.urgency-bg-past    { background: var(--color-past-bg);    border: 2px solid var(--color-past); }
+.urgency-bg-red     { background: var(--color-red-bg);     border: 1.5px solid var(--color-red); }
+.urgency-bg-crimson { background: var(--color-crimson-bg); border: 1.5px solid var(--color-crimson); }
+.urgency-bg-orange  { background: var(--color-orange-bg);  border: 1.5px solid var(--color-orange); }
+.urgency-bg-amber   { background: var(--color-amber-bg);   border: 1.5px solid var(--color-amber); }
+.urgency-bg-lime    { background: var(--color-lime-bg);    border: 1.5px solid var(--color-lime); }
+.urgency-bg-green   { background: var(--color-green-bg);   border: 1.5px solid var(--color-green); }
+.urgency-bg-past    { background: var(--color-past-bg);    border: 1.5px solid var(--color-past); }
 
 .cd-title {
   font-size: 0.85rem;
@@ -569,8 +570,6 @@ textarea {
   to { transform: rotate(360deg); }
 }
 
-
-
 .date-row,
 .meta-row {
   display: flex;
@@ -674,10 +673,6 @@ textarea:focus {
   font-size: 1rem;
 }
 
-.btn-primary:hover {
-  background: var(--accent-dark);
-}
-
 .btn-primary:active {
   transform: scale(0.97);
 }
@@ -697,12 +692,6 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.btn-secondary:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
 /* ==================== TOAST ==================== */
 .toast {
   position: fixed;
@@ -711,16 +700,17 @@ textarea:focus {
   transform: translateX(-50%) translateY(16px);
   background: #222;
   color: #fff;
-  padding: 9px 20px;
-  border-radius: 999px;
+  padding: 10px 16px;
+  border-radius: 18px;
   font-size: 0.88rem;
   font-weight: 600;
+  line-height: 1.45;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.28s ease, transform 0.28s ease;
-  white-space: nowrap;
+  white-space: normal;
   z-index: 999;
-  max-width: 88vw;
+  max-width: min(88vw, 420px);
   text-align: center;
 }
 
@@ -732,14 +722,34 @@ textarea:focus {
 .toast.toast-success { background: var(--success); }
 .toast.toast-error   { background: var(--danger); }
 
+/* ==================== HOVER STATES ==================== */
+@media (hover: hover) {
+  .card:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-edit:hover {
+    background: rgba(51, 144, 236, 0.10);
+  }
+
+  .btn-delete:hover {
+    background: rgba(229, 57, 53, 0.10);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-dark);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 540px) {
-
-  .composer-sheet {
-  max-height: 88vh;
-  overflow: auto;
-}
-  
   .date-row,
   .meta-row,
   .detail-actions,
