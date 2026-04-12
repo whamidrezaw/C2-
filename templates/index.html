@@ -2,10 +2,6 @@
 <html lang="fa-IR">
 <head>
   <meta charset="UTF-8">
-  <!--
-    [E-03] user-scalable=no حذف شد — مخالف WCAG 2.1 بود
-    کاربران می‌توانند zoom کنند
-  -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#3390ec">
   <title>TimeManager Pro</title>
@@ -13,8 +9,6 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-
-  <!-- [E-08] noscript fallback — اگر JS غیرفعال باشد -->
   <noscript>
     <div style="text-align:center; padding:60px 20px; font-family:sans-serif; color:#555">
       <div style="font-size:2rem; margin-bottom:12px">📅</div>
@@ -28,14 +22,10 @@
     <span class="app-title">TimeManager Pro</span>
   </header>
 
-  <!--
-    list view و detail view هر دو اینجا رندر می‌شوند
-    aria-live برای اطلاع screen reader از تغییرات دینامیک
-  -->
   <main id="list" class="event-list" aria-live="polite" aria-label="Events list"></main>
 
-  <div class="input-container" role="form" aria-label="Add new event">
-
+  <form id="eventForm" class="input-container" aria-label="Event form" novalidate>
+    <label class="sr-only" for="title">Event title</label>
     <input
       type="text"
       id="title"
@@ -45,13 +35,8 @@
       aria-label="Event title"
     >
 
-    <!-- دو فیلد تاریخ — شمسی و میلادی -->
     <div class="date-row">
-
       <div class="date-field">
-        <!--
-          [I-09] for="date" اضافه شد — کلیک روی label فیلد را focus می‌کند
-        -->
         <label class="date-label" for="date">📅 Gregorian</label>
         <input
           type="date"
@@ -61,14 +46,11 @@
       </div>
 
       <div class="date-field">
-        <!--
-          [I-09] for="date-jalali" اضافه شد
-        -->
         <label class="date-label" for="date-jalali">📅 Jalali (شمسی)</label>
         <input
           type="text"
           id="date-jalali"
-          placeholder="۱۴۰۴/۰۱/۲۲ یا ۱۴۰۴-۰۱-۲۲"
+          placeholder="۱۴۰۴/۰۱/۲۲ یا 1404-01-22"
           maxlength="10"
           inputmode="numeric"
           autocomplete="off"
@@ -76,23 +58,44 @@
           dir="ltr"
         >
       </div>
-
     </div>
 
-    <select id="repeat" class="repeat-select" aria-label="Repeat type">
-      <option value="none">⏰ One-time reminder</option>
-      <option value="daily">🔁 Repeat Daily</option>
-      <option value="weekly">🔁 Repeat Weekly</option>
-      <option value="monthly">🔁 Repeat Monthly</option>
-      <option value="yearly">🎂 Repeat Every Year (Birthday…)</option>
-    </select>
+    <div class="meta-row">
+      <div class="meta-field">
+        <label class="date-label" for="repeat">🔁 Repeat</label>
+        <select id="repeat" class="repeat-select" aria-label="Repeat type">
+          <option value="none">⏰ One-time reminder</option>
+          <option value="daily">🔁 Repeat Daily</option>
+          <option value="weekly">🔁 Repeat Weekly</option>
+          <option value="monthly">🔁 Repeat Monthly</option>
+          <option value="yearly">🎂 Repeat Every Year</option>
+        </select>
+      </div>
+
+      <div class="meta-field">
+        <label class="date-label" for="category">🏷️ Category</label>
+        <select id="category" class="repeat-select" aria-label="Event category">
+          <option value="general">General</option>
+          <option value="birthday">Birthday</option>
+          <option value="work">Work</option>
+          <option value="family">Family</option>
+          <option value="health">Health</option>
+          <option value="travel">Travel</option>
+          <option value="finance">Finance</option>
+          <option value="study">Study</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+
+    <label class="pin-toggle" for="pin">
+      <input type="checkbox" id="pin" aria-label="Pin event">
+      <span>📌 Pin this event to top</span>
+    </label>
 
     <div class="btn-row">
-      <!--
-        [E-04] onclick حذف شد — listener در app.js → init() تعریف شده
-        style="display:none" باقی است — app.js آن را کنترل می‌کند
-      -->
       <button
+        type="button"
         id="cancelBtn"
         class="btn-secondary"
         style="display:none"
@@ -100,18 +103,42 @@
       >✕</button>
 
       <button
+        type="submit"
         id="addBtn"
         class="btn-primary"
         aria-label="Add event"
       >＋ Add</button>
     </div>
+  </form>
 
-  </div>
+  <template id="detailExtrasTemplate">
+    <section class="detail-actions" aria-label="Event actions">
+      <button type="button" class="btn-secondary detail-action-btn" data-action="share" aria-label="Share event">🔥 Share</button>
+      <button type="button" class="btn-secondary detail-action-btn" data-action="pin" aria-label="Pin event">📌 Pin</button>
+    </section>
 
-  <!--
-    [I-10] role="alert" + aria-live="assertive" اضافه شد
-    screen reader ها پیام toast را می‌خوانند
-  -->
+    <section class="detail-notes" aria-label="Event notes">
+      <div class="detail-section-head">
+        <h3 class="detail-section-title">📝 Notes</h3>
+        <span class="detail-section-hint">Write reminders, tasks, or checklists for this event.</span>
+      </div>
+
+      <textarea
+        class="note-input"
+        id="detail-note"
+        rows="6"
+        maxlength="2000"
+        placeholder="Write important tasks for this event..."
+        aria-label="Event notes"
+      ></textarea>
+
+      <div class="btn-row note-actions">
+        <button type="button" class="btn-secondary" id="noteCancelBtn" aria-label="Cancel note changes">Cancel</button>
+        <button type="button" class="btn-primary" id="noteSaveBtn" aria-label="Save note">💾 Save note</button>
+      </div>
+    </section>
+  </template>
+
   <div
     id="toast"
     class="toast"
@@ -120,11 +147,6 @@
     aria-atomic="true"
   ></div>
 
-  <!--
-    defer: مطمئن می‌شود DOM کاملاً لود شده قبل از اجرای JS
-    telegram-web-app.js باید قبل از app.js لود شود
-  -->
   <script src="/static/app.js" defer></script>
-
 </body>
 </html>
