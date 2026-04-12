@@ -1,11 +1,22 @@
+# ==================== TELEGRAM BOT ====================
+# فعلاً روی 21.1 می‌مانیم تا بدون بررسی breaking changes وارد 22.x نشویم.
 python-telegram-bot==21.1
-fastapi
-uvicorn[standard]
-motor
-pymongo[srv]
-jinja2
-python-multipart
-certifi
-jdatetime
-cachetools
-pymongo
+
+# ==================== WEB FRAMEWORK ====================
+fastapi==0.115.6
+uvicorn[standard]==0.30.6
+gunicorn==22.0.0
+
+# ==================== DATABASE ====================
+# Motor فعلاً نگه داشته شده، اما در backlog باید به PyMongo Async API مهاجرت کند.
+motor==3.6.0
+
+# Motor 3.6 با شاخه PyMongo 4.9 سازگار است؛ 4.10 برای این ترکیب امن نیست.
+pymongo[srv]>=4.9,<4.10
+
+# ==================== TEMPLATES ====================
+jinja2==3.1.4
+
+# ==================== UTILITIES ====================
+certifi==2024.8.30
+jdatetime==5.0.0
