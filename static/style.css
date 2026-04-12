@@ -72,7 +72,7 @@ body {
   color: var(--text);
   margin: 0;
   padding: 0;
-  padding-bottom: var(--input-height);
+  padding-bottom: 96px;
   min-height: 100vh;
 }
 
@@ -137,6 +137,76 @@ textarea {
 /* ==================== LIST ==================== */
 .event-list {
   padding: 14px 14px 8px;
+}
+
+.floating-add-btn {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 260;
+  min-height: 52px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.98rem;
+  font-weight: 800;
+  box-shadow: var(--shadow-md);
+}
+
+.floating-add-btn:active {
+  transform: scale(0.97);
+}
+
+.composer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.38);
+  z-index: 240;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.composer-overlay.open {
+  opacity: 1;
+}
+
+.composer-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 250;
+  background: var(--surface);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+  transform: translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--transition), opacity var(--transition);
+}
+
+.composer-sheet.open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.composer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.composer-handle {
+  width: 52px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 0 auto 12px;
 }
 
 /* ==================== CARD ==================== */
@@ -283,15 +353,7 @@ textarea {
   animation: slideIn 0.2s ease;
 }
 
-.btn-back {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 1rem;
-  font-weight: 700;
-  padding: 10px 0;
-  display: block;
-}
+
 
 .detail-title {
   font-size: 1.4rem;
@@ -507,22 +569,7 @@ textarea {
   to { transform: rotate(360deg); }
 }
 
-/* ==================== INPUT CONTAINER ==================== */
-.input-container {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--surface);
-  padding: 10px 14px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  z-index: 200;
-}
+
 
 .date-row,
 .meta-row {
