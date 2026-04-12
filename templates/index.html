@@ -1,22 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa-IR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <!--
+    [E-03] user-scalable=no حذف شد — مخالف WCAG 2.1 بود
+    کاربران می‌توانند zoom کنند
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#3390ec">
   <title>TimeManager Pro</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
+  <!-- [E-08] noscript fallback — اگر JS غیرفعال باشد -->
+  <noscript>
+    <div style="text-align:center; padding:60px 20px; font-family:sans-serif; color:#555">
+      <div style="font-size:2rem; margin-bottom:12px">📅</div>
+      <p>لطفاً JavaScript را در مرورگر فعال کنید.</p>
+      <p style="font-size:0.85rem; color:#999; margin-top:8px">Please enable JavaScript to use TimeManager Pro.</p>
+    </div>
+  </noscript>
+
   <header class="app-header">
-    <span class="app-icon">📅</span>
+    <span class="app-icon" aria-hidden="true">📅</span>
     <span class="app-title">TimeManager Pro</span>
   </header>
 
-  <main id="list" class="event-list"></main>
+  <!--
+    list view و detail view هر دو اینجا رندر می‌شوند
+    aria-live برای اطلاع screen reader از تغییرات دینامیک
+  -->
+  <main id="list" class="event-list" aria-live="polite" aria-label="Events list"></main>
 
-  <div class="input-container">
+  <div class="input-container" role="form" aria-label="Add new event">
 
     <input
       type="text"
@@ -24,28 +42,44 @@
       placeholder="Event title (e.g. Birthday)"
       maxlength="200"
       autocomplete="off"
+      aria-label="Event title"
     >
 
     <!-- دو فیلد تاریخ — شمسی و میلادی -->
     <div class="date-row">
+
       <div class="date-field">
-        <label class="date-label">📅 Gregorian</label>
-        <input type="date" id="date">
+        <!--
+          [I-09] for="date" اضافه شد — کلیک روی label فیلد را focus می‌کند
+        -->
+        <label class="date-label" for="date">📅 Gregorian</label>
+        <input
+          type="date"
+          id="date"
+          aria-label="Gregorian date"
+        >
       </div>
+
       <div class="date-field">
-        <label class="date-label">📅 Jalali (شمسی)</label>
+        <!--
+          [I-09] for="date-jalali" اضافه شد
+        -->
+        <label class="date-label" for="date-jalali">📅 Jalali (شمسی)</label>
         <input
           type="text"
           id="date-jalali"
-          placeholder="1404/01/22"
+          placeholder="۱۴۰۴/۰۱/۲۲ یا ۱۴۰۴-۰۱-۲۲"
           maxlength="10"
           inputmode="numeric"
           autocomplete="off"
+          aria-label="Jalali date"
+          dir="ltr"
         >
       </div>
+
     </div>
 
-    <select id="repeat" class="repeat-select">
+    <select id="repeat" class="repeat-select" aria-label="Repeat type">
       <option value="none">⏰ One-time reminder</option>
       <option value="daily">🔁 Repeat Daily</option>
       <option value="weekly">🔁 Repeat Weekly</option>
@@ -54,27 +88,43 @@
     </select>
 
     <div class="btn-row">
+      <!--
+        [E-04] onclick حذف شد — listener در app.js → init() تعریف شده
+        style="display:none" باقی است — app.js آن را کنترل می‌کند
+      -->
       <button
         id="cancelBtn"
         class="btn-secondary"
         style="display:none"
-        onclick="TimeManager.cancelEdit()"
+        aria-label="Cancel edit"
       >✕</button>
 
       <button
         id="addBtn"
         class="btn-primary"
-        onclick="TimeManager.add(
-          document.getElementById('title').value,
-          document.getElementById('date').value,
-          document.getElementById('repeat').value
-        )"
+        aria-label="Add event"
       >＋ Add</button>
     </div>
 
   </div>
 
-  <div id="toast" class="toast"></div>
-  <script src="/static/app.js"></script>
+  <!--
+    [I-10] role="alert" + aria-live="assertive" اضافه شد
+    screen reader ها پیام toast را می‌خوانند
+  -->
+  <div
+    id="toast"
+    class="toast"
+    role="alert"
+    aria-live="assertive"
+    aria-atomic="true"
+  ></div>
+
+  <!--
+    defer: مطمئن می‌شود DOM کاملاً لود شده قبل از اجرای JS
+    telegram-web-app.js باید قبل از app.js لود شود
+  -->
+  <script src="/static/app.js" defer></script>
+
 </body>
 </html>
