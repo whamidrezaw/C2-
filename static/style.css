@@ -17,16 +17,22 @@
   --radius-md:    16px;
   --transition:   0.2s ease;
 
+  /* [E-02] ارتفاع input-container به‌عنوان variable
+     body padding و toast position هر دو از این استفاده می‌کنند */
+  --input-height: 260px;
+
   /* urgency colors */
   --color-red:    #e53935;
   --color-orange: #fb8c00;
-  --color-yellow: #a333ec;
+  /* [I-01] yellow → purple */
+  --color-purple: #a333ec;
   --color-green:  #388e3c;
   --color-past:   #9e9e9e;
 
   --color-red-bg:    rgba(229,57,53,0.08);
   --color-orange-bg: rgba(251,140,0,0.08);
-  --color-yellow-bg: rgba(163, 51, 236, 0.08);
+  /* [I-01] yellow-bg → purple-bg */
+  --color-purple-bg: rgba(163,51,236,0.08);
   --color-green-bg:  rgba(56,142,60,0.08);
   --color-past-bg:   rgba(158,158,158,0.08);
 }
@@ -40,10 +46,14 @@
   --border:   rgba(255,255,255,0.08);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.45);
+
   --color-red-bg:    rgba(229,57,53,0.15);
   --color-orange-bg: rgba(251,140,0,0.15);
-  --color-yellow-bg: rgba(163, 51, 236, 0.08);
+  /* [I-01] dark mode — purple-bg */
+  --color-purple-bg: rgba(163,51,236,0.15);
   --color-green-bg:  rgba(56,142,60,0.15);
+  /* [E-01] past-bg در dark mode اضافه شد */
+  --color-past-bg:   rgba(158,158,158,0.12);
 }
 
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -54,7 +64,8 @@ body {
   background:  var(--bg);
   color:       var(--text);
   margin: 0; padding: 0;
-  padding-bottom: 260px;
+  /* [E-02] از variable استفاده می‌کند — نه عدد ثابت */
+  padding-bottom: var(--input-height);
   min-height: 100vh;
 }
 
@@ -96,7 +107,8 @@ body {
 /* رنگ‌بندی بر اساس فاصله زمانی */
 .urgency-red    { border-color: var(--color-red);    background: var(--color-red-bg);    }
 .urgency-orange { border-color: var(--color-orange); background: var(--color-orange-bg); }
-.urgency-yellow { border-color: var(--color-yellow); background: var(--color-yellow-bg); }
+/* [I-01] urgency-yellow → urgency-purple */
+.urgency-purple { border-color: var(--color-purple); background: var(--color-purple-bg); }
 .urgency-green  { border-color: var(--color-green);  background: var(--color-green-bg);  }
 .urgency-past   { border-color: var(--color-past);   background: var(--color-past-bg); opacity: 0.7; }
 
@@ -119,7 +131,6 @@ body {
 .date-sep      { font-size: 0.8rem; color: var(--border); }
 .jalali        { font-size: 0.82rem; color: var(--hint); direction: rtl; }
 
-/* countdown خلاصه روی کارت */
 .card-countdown {
   font-size: 0.82rem;
   font-weight: 600;
@@ -190,7 +201,8 @@ body {
 
 .urgency-bg-red    { background: var(--color-red-bg);    border: 2px solid var(--color-red);    }
 .urgency-bg-orange { background: var(--color-orange-bg); border: 2px solid var(--color-orange); }
-.urgency-bg-yellow { background: var(--color-yellow-bg); border: 2px solid var(--color-yellow); }
+/* [I-01] urgency-bg-yellow → urgency-bg-purple */
+.urgency-bg-purple { background: var(--color-purple-bg); border: 2px solid var(--color-purple); }
 .urgency-bg-green  { background: var(--color-green-bg);  border: 2px solid var(--color-green);  }
 .urgency-bg-past   { background: var(--color-past-bg);   border: 2px solid var(--color-past);   }
 
@@ -295,8 +307,13 @@ input:focus, .repeat-select:focus {
   font-size: 1rem; font-weight: 700; cursor: pointer;
   transition: background var(--transition), transform var(--transition);
 }
-.btn-primary:active { transform: scale(0.97); }
-.btn-primary:hover  { background: var(--accent-dark); }
+.btn-primary:active  { transform: scale(0.97); }
+.btn-primary:hover   { background: var(--accent-dark); }
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
 
 .btn-secondary {
   background: transparent; color: var(--hint);
@@ -309,7 +326,10 @@ input:focus, .repeat-select:focus {
 
 /* ==================== TOAST ==================== */
 .toast {
-  position: fixed; bottom: 270px; left: 50%;
+  position: fixed;
+  /* [E-02] از variable استفاده می‌کند — هماهنگ با body padding */
+  bottom: calc(var(--input-height) + 10px);
+  left: 50%;
   transform: translateX(-50%) translateY(16px);
   background: #222; color: white;
   padding: 9px 20px; border-radius: 100px;
