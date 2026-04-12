@@ -734,9 +734,6 @@ textarea:focus {
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 540px) {
-  :root {
-    --input-height: 430px;
-  }
 
   .composer-sheet {
   max-height: 88vh;
