@@ -9,6 +9,7 @@ const TimeManager = (() => {
     ready() {},
     onEvent() {},
     switchInlineQuery() {},
+    BackButton: { show() {}, hide() {} },
     showPopup(config, cb) {
       const ok = window.confirm(config?.message || "Are you sure?");
       cb(ok ? "yes" : "no");
@@ -25,7 +26,7 @@ const TimeManager = (() => {
     editingId: null,
     userTZ: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     view: "list",
-    detailId: null
+    detailId: null,
     composerOpen: false
   };
 
@@ -84,71 +85,70 @@ const TimeManager = (() => {
     });
   }
 
-function _els() {
-  return {
-    sheet: document.getElementById("composerSheet"),
-    overlay: document.getElementById("composerOverlay"),
-    openBtn: document.getElementById("openComposerBtn")
-  };
-}
+  function _els() {
+    return {
+      sheet: document.getElementById("composerSheet"),
+      overlay: document.getElementById("composerOverlay"),
+      openBtn: document.getElementById("openComposerBtn")
+    };
+  }
 
-function _pushAppState(mode) {
-  history.pushState({ tmMode: mode, t: Date.now() }, "");
-}
+  function _pushAppState(mode) {
+    history.pushState({ tmMode: mode, t: Date.now() }, "");
+  }
 
-function _openComposer(push = true) {
-  const { sheet, overlay, openBtn } = _els();
-  if (!sheet || !overlay) return;
+  function _openComposer(push = true) {
+    const { sheet, overlay, openBtn } = _els();
+    if (!sheet || !overlay) return;
 
-  state.composerOpen = true;
-  sheet.hidden = false;
-  overlay.hidden = false;
-  sheet.classList.add("open");
-  overlay.classList.add("open");
-  sheet.setAttribute("aria-hidden", "false");
-  if (openBtn) openBtn.style.display = "inline-flex";
-  if (openBtn) openBtn.style.display = "none";
+    state.composerOpen = true;
+    sheet.hidden = false;
+    overlay.hidden = false;
+    sheet.classList.add("open");
+    overlay.classList.add("open");
+    sheet.setAttribute("aria-hidden", "false");
+    if (openBtn) openBtn.style.display = "none";
 
-  if (push) _pushAppState("composer");
+    if (push) _pushAppState("composer");
 
-  const titleEl = document.getElementById("title");
-  setTimeout(() => titleEl?.focus(), 120);
-}
+    const titleEl = document.getElementById("title");
+    setTimeout(() => titleEl?.focus(), 120);
+  }
 
-function _closeComposer(reset = false) {
-  const { sheet, overlay, openBtn } = _els();
-  if (!sheet || !overlay) return;
+  function _closeComposer(reset = false) {
+    const { sheet, overlay, openBtn } = _els();
+    if (!sheet || !overlay) return;
 
-  state.composerOpen = false;
-  sheet.classList.remove("open");
-  overlay.classList.remove("open");
-  sheet.setAttribute("aria-hidden", "true");
-  if (openBtn) openBtn.style.display = "inline-flex";
+    state.composerOpen = false;
+    sheet.classList.remove("open");
+    overlay.classList.remove("open");
+    sheet.setAttribute("aria-hidden", "true");
+    if (openBtn) openBtn.style.display = "inline-flex";
 
-  setTimeout(() => {
-    overlay.hidden = true;
-    if (!state.composerOpen) sheet.hidden = true;
-  }, 220);
+    setTimeout(() => {
+      overlay.hidden = true;
+      if (!state.composerOpen) sheet.hidden = true;
+    }, 220);
 
-  if (reset) UI.setEditMode(null);
-}
+    if (reset) UI.setEditMode(null);
+  }
 
-  function normalizeDigits(str) {
+  function _normalizeDigits(str) {
     return String(str || "")
       .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 1776))
       .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 1632));
   }
 
-  function normalizeDateInput(str) {
-    return normalizeDigits(str)
+  function _normalizeDateInput(str) {
+    return _normalizeDigits(str)
       .trim()
       .replace(/\s+/g, "")
       .replace(/[.,،\-]+/g, "/")
-      .replace(/\/+/g, "/");
+      .replace(/\/+?/g, "/");
   }
 
-  function autoFormatJalaliInput(str) {
-    const normalized = normalizeDateInput(str);
+  function _autoFormatJalaliInput(str) {
+    const normalized = _normalizeDateInput(str);
     if (!normalized) return "";
 
     const digitsOnly = normalized.replace(/\D/g, "");
@@ -303,10 +303,10 @@ function _closeComposer(reset = false) {
       }
 
       let gd = days + 1;
-      const sal_a = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      const salA = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
       let gm = 1;
-      while (gm <= 12 && gd > sal_a[gm]) {
-        gd -= sal_a[gm];
+      while (gm <= 12 && gd > salA[gm]) {
+        gd -= salA[gm];
         gm++;
       }
 
@@ -341,7 +341,7 @@ function _closeComposer(reset = false) {
     },
 
     parse(str) {
-      const normalized = autoFormatJalaliInput(str);
+      const normalized = _autoFormatJalaliInput(str);
       if (!normalized) return null;
       const parts = normalized.split("/");
       if (parts.length !== 3) return null;
@@ -464,7 +464,7 @@ function _closeComposer(reset = false) {
       const card = document.createElement("div");
       card.className = `card urgency-${urgency} ${event.optimistic ? "syncing" : ""}`;
       card.dataset.id = event.id;
-      card.addEventListener("click", (ev) => {
+      card.addEventListener("click", ev => {
         if (ev.target.closest(".card-actions")) return;
         TimeManager.showDetail(event);
       });
@@ -555,12 +555,14 @@ function _closeComposer(reset = false) {
       card.appendChild(cdEl);
       statusEl.style.marginTop = "2px";
       card.appendChild(statusEl);
+
       if (event.note) {
         const notePreview = document.createElement("div");
         notePreview.className = "card-date";
         notePreview.textContent = `📝 ${event.note.slice(0, 80)}${event.note.length > 80 ? "…" : ""}`;
         card.appendChild(notePreview);
       }
+
       card.appendChild(actions);
       return card;
     },
@@ -575,7 +577,7 @@ function _closeComposer(reset = false) {
         return;
       }
       if (state.events.length === 0) {
-        root.innerHTML = '<div class="empty">📅 No events yet.<br><small>Add one below!</small></div>';
+        root.innerHTML = '<div class="empty">📅 No events yet.<br><small>Tap "Add event" to create one.</small></div>';
         return;
       }
 
@@ -598,8 +600,6 @@ function _closeComposer(reset = false) {
 
       const wrap = document.createElement("div");
       wrap.className = "detail-wrap";
-
-
 
       const title = document.createElement("h2");
       title.className = "detail-title";
@@ -696,7 +696,6 @@ function _closeComposer(reset = false) {
       meta.appendChild(makeMetaItem(`${category.icon} ${category.label}`, "Category"));
       meta.appendChild(makeMetaItem(event.pinned ? "📌 Pinned" : "—", "Pin"));
       meta.appendChild(makeMetaItem(STATUS_LABELS[safeStatus] || "", "Notification", `status-${safeStatus}`));
-
 
       wrap.appendChild(title);
       wrap.appendChild(dates);
@@ -813,7 +812,7 @@ function _closeComposer(reset = false) {
       return;
     }
 
-    const formatted = autoFormatJalaliInput(raw);
+    const formatted = _autoFormatJalaliInput(raw);
     if (jalaliEl && jalaliEl.value !== formatted) jalaliEl.value = formatted;
 
     const iso = Jalali.parse(formatted);
@@ -873,27 +872,41 @@ function _closeComposer(reset = false) {
       const cancelBtn = document.getElementById("cancelBtn");
       const openComposerBtn = document.getElementById("openComposerBtn");
       const composerOverlay = document.getElementById("composerOverlay");
-      
+
+      tg.BackButton?.hide?.();
+
       let jalaliDebounce;
       if (jalaliEl) {
         jalaliEl.addEventListener("input", () => {
-          const formatted = autoFormatJalaliInput(jalaliEl.value);
+          const formatted = _autoFormatJalaliInput(jalaliEl.value);
           if (formatted !== jalaliEl.value) jalaliEl.value = formatted;
           clearTimeout(jalaliDebounce);
           jalaliDebounce = setTimeout(() => _syncJalaliToGregorian(jalaliEl.value), 250);
         });
       }
-      if (dateEl) dateEl.addEventListener("change", () => _syncGregorianToJalali(dateEl.value));
+
+      if (dateEl) {
+        dateEl.addEventListener("change", () => _syncGregorianToJalali(dateEl.value));
+      }
+
       if (form) {
         form.addEventListener("submit", ev => {
           ev.preventDefault();
           this.add(titleEl?.value, dateEl?.value, repeatEl?.value, categoryEl?.value, pinEl?.checked);
         });
       }
+
       if (addBtn && !form) {
         addBtn.addEventListener("click", () => this.add(titleEl?.value, dateEl?.value, repeatEl?.value, categoryEl?.value, pinEl?.checked));
       }
-      if (cancelBtn) cancelBtn.addEventListener("click", () => this.cancelEdit());
+
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+          this.cancelEdit();
+          if (history.state?.tmMode === "composer") history.back();
+        });
+      }
+
       if (titleEl) {
         titleEl.addEventListener("keydown", ev => {
           if (ev.key === "Enter" && !ev.shiftKey) {
@@ -902,6 +915,31 @@ function _closeComposer(reset = false) {
           }
         });
       }
+
+      if (openComposerBtn) {
+        openComposerBtn.addEventListener("click", () => {
+          UI.setEditMode(null);
+          _openComposer(true);
+        });
+      }
+
+      if (composerOverlay) {
+        composerOverlay.addEventListener("click", () => {
+          _closeComposer(false);
+          history.back();
+        });
+      }
+
+      window.addEventListener("popstate", () => {
+        if (state.composerOpen) {
+          _closeComposer(false);
+          return;
+        }
+
+        if (state.view === "detail") {
+          this.showList(false);
+        }
+      });
 
       state.events = _sortEvents(Cache.load());
       scheduleRender();
@@ -938,21 +976,21 @@ function _closeComposer(reset = false) {
       scheduleRender();
     },
 
-showDetail(event, push = true) {
-  state.view = "detail";
-  state.detailId = event.id;
-  _closeComposer(false);
-  UI.renderDetail(event);
-  if (push) _pushAppState("detail");
-  tg.HapticFeedback?.impactOccurred?.("light");
-},
+    showDetail(event, push = true) {
+      state.view = "detail";
+      state.detailId = event.id;
+      _closeComposer(false);
+      UI.renderDetail(event);
+      if (push) _pushAppState("detail");
+      tg.HapticFeedback?.impactOccurred?.("light");
+    },
 
-showList(push = false) {
-  state.view = "list";
-  state.detailId = null;
-  scheduleRender();
-  if (push) _pushAppState("list");
-},
+    showList(push = false) {
+      state.view = "list";
+      state.detailId = null;
+      scheduleRender();
+      if (push) _pushAppState("list");
+    },
 
     async add(title, date, repeat, category, pinned) {
       title = String(title || "").trim();
@@ -1006,21 +1044,22 @@ showList(push = false) {
       }
     },
 
-startEdit(event) {
-  UI.setEditMode(event);
-  _openComposer(true);
-  tg.HapticFeedback?.impactOccurred?.("light");
-},
+    startEdit(event) {
+      UI.setEditMode(event);
+      _openComposer(true);
+      tg.HapticFeedback?.impactOccurred?.("light");
+    },
 
-cancelEdit() {
-  UI.setEditMode(null);
-  _closeComposer(false);
-  tg.HapticFeedback?.impactOccurred?.("light");
-},
+    cancelEdit() {
+      UI.setEditMode(null);
+      _closeComposer(false);
+      tg.HapticFeedback?.impactOccurred?.("light");
+    },
 
     async saveEdit(title, date, repeat, category, pinned) {
       const eventId = state.editingId;
       if (!eventId) return;
+
       const existing = _getEventById(eventId);
       const note = existing?.note || "";
       const addBtn = document.getElementById("addBtn");
@@ -1100,6 +1139,7 @@ cancelEdit() {
     async togglePin(eventId, forcedValue = null) {
       const existing = _getEventById(eventId);
       if (!existing) return;
+
       const nextPinned = typeof forcedValue === "boolean" ? forcedValue : !Boolean(existing.pinned);
       const prevPinned = Boolean(existing.pinned);
 
@@ -1127,7 +1167,7 @@ cancelEdit() {
       try {
         if (typeof tg.switchInlineQuery === "function") {
           tg.switchInlineQuery(shareText, ["users", "groups", "channels"]);
-          UI.showToast("🚀 Share mode opened.");
+          UI.showToast("🔥 Share mode opened.");
           return;
         }
       } catch {}
@@ -1135,7 +1175,7 @@ cancelEdit() {
       try {
         if (navigator.share) {
           await navigator.share({ text: shareText, title: event.title });
-          UI.showToast("🚀 Shared.");
+          UI.showToast("✅ Shared.");
           return;
         }
       } catch {}
@@ -1148,7 +1188,7 @@ cancelEdit() {
         }
       } catch {}
 
-      UI.showToast("⚠️ Share not available.", "error");
+      UI.showToast("❌ Share not available.", "error");
     }
   };
 })();
