@@ -1,14 +1,18 @@
 <!DOCTYPE html>
-<html lang="fa-IR">
+<html lang="fa-IR" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#3390ec">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="TimeManager Pro - Smart event reminders with Gregorian and Jalali dates for Telegram Mini Apps.">
   <title>TimeManager Pro</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+  <a href="#list" class="sr-only">Skip to content</a>
+
   <noscript>
     <div style="text-align:center; padding:60px 20px; font-family:sans-serif; color:#555">
       <div style="font-size:2rem; margin-bottom:12px">📅</div>
@@ -22,115 +26,147 @@
     <span class="app-title">TimeManager Pro</span>
   </header>
 
-<main id="list" class="event-list" aria-live="polite" aria-label="Events list"></main>
+  <main id="list" class="event-list" aria-live="polite" aria-label="فهرست رویدادها"></main>
 
-<button
-  type="button"
-  id="openComposerBtn"
-  class="floating-add-btn"
-  aria-label="Open add event form"
->
-  ＋ Add event
-</button>
+  <button
+    type="button"
+    id="openComposerBtn"
+    class="floating-add-btn"
+    aria-label="Open add event form"
+    aria-controls="composerSheet"
+    aria-expanded="false"
+  >
+    ＋ Add event
+  </button>
 
-<div id="composerOverlay" class="composer-overlay" hidden></div>
+  <div
+    id="composerOverlay"
+    class="composer-overlay"
+    hidden
+    aria-hidden="true"
+  ></div>
 
-<section
-  id="composerSheet"
-  class="composer-sheet"
-  aria-label="Event form"
-  aria-hidden="true"
-  hidden
->
-  <div class="composer-handle" aria-hidden="true"></div>
+  <section
+    id="composerSheet"
+    class="composer-sheet"
+    aria-label="Event form"
+    aria-hidden="true"
+    hidden
+  >
+    <div class="composer-handle" aria-hidden="true"></div>
 
-  <form id="eventForm" class="composer-form" novalidate>
-    <label class="sr-only" for="title">Event title</label>
-    <input
-      type="text"
-      id="title"
-      placeholder="Event title (e.g. Birthday)"
-      maxlength="200"
-      autocomplete="off"
-      aria-label="Event title"
-    >
+    <form id="eventForm" class="composer-form" novalidate>
+      <label class="sr-only" for="title">Event title</label>
+      <input
+        type="text"
+        id="title"
+        placeholder="Event title (e.g. Birthday)"
+        maxlength="200"
+        autocomplete="off"
+        aria-label="Event title"
+        required
+      >
 
-    <div class="date-row">
-      <div class="date-field">
-        <label class="date-label" for="date">📅 Gregorian</label>
-        <input type="date" id="date" aria-label="Gregorian date">
+      <div class="date-row">
+        <div class="date-field">
+          <label class="date-label" for="date">📅 Gregorian</label>
+          <input
+            type="date"
+            id="date"
+            aria-label="Gregorian date"
+            required
+          >
+        </div>
+
+        <div class="date-field">
+          <label class="date-label" for="date-jalali">📅 Jalali (شمسی)</label>
+          <input
+            type="text"
+            id="date-jalali"
+            placeholder="1404/01/22 یا 1404-01-22"
+            maxlength="10"
+            inputmode="numeric"
+            autocomplete="off"
+            aria-label="Jalali date"
+            dir="ltr"
+          >
+        </div>
       </div>
 
-      <div class="date-field">
-        <label class="date-label" for="date-jalali">📅 Jalali (شمسی)</label>
-        <input
-          type="text"
-          id="date-jalali"
-          placeholder="۱۴۰۴/۰۱/۲۲ یا 1404-01-22"
-          maxlength="10"
-          inputmode="numeric"
-          autocomplete="off"
-          aria-label="Jalali date"
-          dir="ltr"
+      <div class="meta-row">
+        <div class="meta-field">
+          <label class="date-label" for="repeat">🔁 Repeat</label>
+          <select id="repeat" class="repeat-select" aria-label="Repeat type">
+            <option value="none">⏰ One-time reminder</option>
+            <option value="daily">🔁 Repeat Daily</option>
+            <option value="weekly">🔁 Repeat Weekly</option>
+            <option value="monthly">🔁 Repeat Monthly</option>
+            <option value="yearly">🎂 Repeat Every Year</option>
+          </select>
+        </div>
+
+        <div class="meta-field">
+          <label class="date-label" for="category">🏷️ Category</label>
+          <select id="category" class="repeat-select" aria-label="Event category">
+            <option value="general">General</option>
+            <option value="birthday">Birthday</option>
+            <option value="work">Work</option>
+            <option value="family">Family</option>
+            <option value="health">Health</option>
+            <option value="travel">Travel</option>
+            <option value="finance">Finance</option>
+            <option value="study">Study</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="pin-toggle" for="pin">
+        <input type="checkbox" id="pin" aria-label="Pin event">
+        <span>📌 Pin this event to top</span>
+      </label>
+
+      <div class="btn-row">
+        <button
+          type="button"
+          id="cancelBtn"
+          class="btn-secondary"
+          aria-label="Close form"
         >
+          Cancel
+        </button>
+
+        <button
+          type="submit"
+          id="addBtn"
+          class="btn-primary"
+          aria-label="Add event"
+        >
+          ＋ Add
+        </button>
       </div>
-    </div>
-
-    <div class="meta-row">
-      <div class="meta-field">
-        <label class="date-label" for="repeat">🔁 Repeat</label>
-        <select id="repeat" class="repeat-select" aria-label="Repeat type">
-          <option value="none">⏰ One-time reminder</option>
-          <option value="daily">🔁 Repeat Daily</option>
-          <option value="weekly">🔁 Repeat Weekly</option>
-          <option value="monthly">🔁 Repeat Monthly</option>
-          <option value="yearly">🎂 Repeat Every Year</option>
-        </select>
-      </div>
-
-      <div class="meta-field">
-        <label class="date-label" for="category">🏷️ Category</label>
-        <select id="category" class="repeat-select" aria-label="Event category">
-          <option value="general">General</option>
-          <option value="birthday">Birthday</option>
-          <option value="work">Work</option>
-          <option value="family">Family</option>
-          <option value="health">Health</option>
-          <option value="travel">Travel</option>
-          <option value="finance">Finance</option>
-          <option value="study">Study</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-    </div>
-
-    <label class="pin-toggle" for="pin">
-      <input type="checkbox" id="pin" aria-label="Pin event">
-      <span>📌 Pin this event to top</span>
-    </label>
-
-    <div class="btn-row">
-      <button
-        type="button"
-        id="cancelBtn"
-        class="btn-secondary"
-        aria-label="Close form"
-      >Cancel</button>
-
-      <button
-        type="submit"
-        id="addBtn"
-        class="btn-primary"
-        aria-label="Add event"
-      >＋ Add</button>
-    </div>
-  </form>
-</section>
+    </form>
+  </section>
 
   <template id="detailExtrasTemplate">
     <section class="detail-actions" aria-label="Event actions">
-      <button type="button" class="btn-secondary detail-action-btn" data-action="share" aria-label="Share event">🔥 Share</button>
-      <button type="button" class="btn-secondary detail-action-btn" data-action="pin" aria-label="Pin event">📌 Pin</button>
+      <button
+        type="button"
+        class="btn-secondary detail-action-btn"
+        data-action="share"
+        aria-label="Share event"
+      >
+        🔥 Share
+      </button>
+
+      <button
+        type="button"
+        class="btn-secondary detail-action-btn"
+        data-action="pin"
+        aria-label="Pin event"
+      >
+        📌 Pin
+      </button>
     </section>
 
     <section class="detail-notes" aria-label="Event notes">
@@ -149,8 +185,23 @@
       ></textarea>
 
       <div class="btn-row note-actions">
-        <button type="button" class="btn-secondary" id="noteCancelBtn" aria-label="Cancel note changes">Cancel</button>
-        <button type="button" class="btn-primary" id="noteSaveBtn" aria-label="Save note">💾 Save note</button>
+        <button
+          type="button"
+          class="btn-secondary"
+          id="noteCancelBtn"
+          aria-label="Cancel note changes"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          class="btn-primary"
+          id="noteSaveBtn"
+          aria-label="Save note"
+        >
+          💾 Save note
+        </button>
       </div>
     </section>
   </template>
