@@ -1,6 +1,3 @@
-from pathlib import Path
-import ast
-code = '''import asyncio
 import hashlib
 import hmac
 import html
@@ -595,9 +592,3 @@ async def api_pin(request: Request, payload: dict = Body(...)):
     if result.matched_count == 0:
         raise HTTPException(404, "NOT_FOUND_OR_UNAUTHORIZED")
     return {"success": True, "pinned": pinned}
-'''
-Path('output').mkdir(exist_ok=True)
-path = Path('output/main.py')
-path.write_text(code, encoding='utf-8')
-ast.parse(code)
-print(path)
