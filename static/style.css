@@ -706,7 +706,7 @@ textarea:focus {
 /* ==================== TOAST ==================== */
 .toast {
   position: fixed;
-  bottom: calc(var(--input-height) + 10px);
+  bottom: calc(84px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(16px);
   background: #222;
@@ -738,6 +738,11 @@ textarea:focus {
     --input-height: 430px;
   }
 
+  .composer-sheet {
+  max-height: 88vh;
+  overflow: auto;
+}
+  
   .date-row,
   .meta-row,
   .detail-actions,
