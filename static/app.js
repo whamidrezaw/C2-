@@ -1,19 +1,40 @@
 (() => {
-  // ✅ DEBUG - همه چیز رو لاگ کن
-  console.log("=== TimeManager Pro Debug ===");
-  console.log("window.Telegram:", window.Telegram);
-  console.log("window.Telegram?.WebApp:", window.Telegram?.WebApp);
-  
   const tg = window.Telegram?.WebApp || null;
-  console.log("tg object:", tg);
-  console.log("tg.initData:", tg?.initData);
-  console.log("tg.initData length:", tg?.initData?.length);
-  
-  if (tg?.initData) {
-    console.log("initData (first 100 chars):", tg.initData.substring(0, 100));
+
+  // ✅ DEBUG - چک کن آیا tg موجود است
+  console.log("[DEBUG] window.Telegram:", !!window.Telegram);
+  console.log("[DEBUG] tg object:", !!tg);
+  console.log("[DEBUG] tg.initData:", tg?.initData);
+  console.log("[DEBUG] initData length:", tg?.initData?.length || 0);
+
+  // ✅ اگر tg null است، خطا دهید:
+  if (!tg) {
+    console.error("❌ FATAL: Telegram WebApp not available!");
+    console.error("   Mini App must be opened from within Telegram.");
+    document.body.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: red;">
+        <h2>⚠️ خطا</h2>
+        <p>این اپلیکیشن فقط از داخل تلگرام کار می‌کند.</p>
+        <p>لطفا از Telegram Mini App وارد شوید.</p>
+      </div>
+    `;
+    return;
   }
-  
-  console.log("==============================");
+
+  // ✅ اگر initData خالی است:
+  if (!tg.initData || tg.initData.trim().length === 0) {
+    console.error("❌ FATAL: initData is empty!");
+    document.body.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: red;">
+        <h2>⚠️ خطا</h2>
+        <p>Telegram Mini App نتوانست احراز هویت کند.</p>
+        <p>Mini App را دوباره باز کنید.</p>
+      </div>
+    `;
+    return;
+  }
+
+  console.log("[DEBUG] ✅ Telegram WebApp ready!");
 
   const state = {
     events: [],
@@ -24,9 +45,10 @@
     detailEventId: null,
     editingEventId: null,
     lastFocusedElement: null,
-    initData: tg?.initData || "",
+    initData: tg.initData,  // ← حالا تضمینی است
   };
 
+  // ... ادامه کد
   // ... ادامه کد
 (() => {
   const tg = window.Telegram?.WebApp || null;
