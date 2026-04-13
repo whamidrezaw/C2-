@@ -226,7 +226,7 @@
     const hasFiltered = state.filteredEvents.length > 0;
 
     els.listErrorState.hidden = true;
-    els.listState.hidden = hasEvents || !hasFiltered ? true : false;
+    els.listState.hidden = true;
 
     if (hasEvents && !hasFiltered) {
       els.listState.hidden = false;
