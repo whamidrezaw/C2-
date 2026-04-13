@@ -36,21 +36,6 @@ def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
     _rate_store[user_id] = history
 
 
-def build_data_check_string(parsed: dict[str, str]) -> str:
-    filtered = {
-        key: value
-        for key, value in parsed.items()
-        if key not in {"hash", "signature"}
-    }
-    return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
-
-
-def compute_telegram_hash(init_data_map: dict[str, str], bot_token: str) -> str:
-    data_check_string = build_data_check_string(init_data_map)
-    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
-
 def parse_init_data(init_data: str) -> dict[str, str]:
     if not init_data:
         raise HTTPException(status_code=403, detail="NO_DATA")
@@ -60,6 +45,37 @@ def parse_init_data(init_data: str) -> dict[str, str]:
         raise HTTPException(status_code=403, detail="INVALID_INIT_DATA")
 
     return parsed
+
+
+def build_data_check_string_from_raw(init_data: str) -> str:
+    pairs = []
+    for chunk in init_data.split("&"):
+        if not chunk:
+            continue
+        if chunk.startswith("hash="):
+            continue
+        if chunk.startswith("signature="):
+            continue
+        key, sep, value = chunk.partition("=")
+        if not sep:
+            continue
+        pairs.append((key, value))
+
+    pairs.sort(key=lambda item: item[0])
+    return "\n".join(f"{key}={value}" for key, value in pairs)
+
+
+def extract_hash_from_raw(init_data: str) -> str | None:
+    for chunk in init_data.split("&"):
+        if chunk.startswith("hash="):
+            return chunk.partition("=")[2]
+    return None
+
+
+def compute_telegram_hash_from_raw(init_data: str, bot_token: str) -> str:
+    data_check_string = build_data_check_string_from_raw(init_data)
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
 
 def parse_init_user(user_raw: str) -> dict[str, Any]:
@@ -106,11 +122,11 @@ async def validate_init_data(
 
     parsed = parse_init_data(init_data)
 
-    received_hash = parsed.get("hash")
+    received_hash = extract_hash_from_raw(init_data)
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    computed_hash = compute_telegram_hash(parsed, settings.bot_token)
+    computed_hash = compute_telegram_hash_from_raw(init_data, settings.bot_token)
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
         logger.warning("Bad Telegram initData HMAC: ip=%s", client_ip)
