@@ -1,7 +1,8 @@
 from __future__ import annotations
-import signal
+
 import asyncio
 import logging
+import signal
 
 from telegram import Bot
 
@@ -45,17 +46,17 @@ async def worker_loop() -> None:
         logger.info("Reminder worker stopped")
 
 
-
-
 def main() -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     def _handle_signal(sig: int, frame: object) -> None:
-        logger.info("Reminder worker received signal %s, shutting down...", sig)
+        logger.info("Reminder worker received signal %s, shutting down gracefully...", sig)
+        # همه task های در حال اجرا را cancel می‌کنیم
         for task in asyncio.all_tasks(loop):
             task.cancel()
 
+    # هم SIGTERM (از systemd) و هم SIGINT (از Ctrl+C) را handle می‌کنیم
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
@@ -64,7 +65,14 @@ def main() -> None:
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Reminder worker stopped cleanly")
     finally:
-        loop.close()
+        # اطمینان از بسته شدن تمیز loop
+        try:
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        finally:
+            loop.close()
+            logger.info("Event loop closed")
 
 
 if __name__ == "__main__":
