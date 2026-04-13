@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import signal
 import asyncio
 import logging
 
@@ -45,7 +45,7 @@ async def worker_loop() -> None:
         logger.info("Reminder worker stopped")
 
 
-import signal
+
 
 def main() -> None:
     loop = asyncio.new_event_loop()
