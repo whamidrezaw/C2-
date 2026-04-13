@@ -225,23 +225,25 @@
     const hasEvents = state.events.length > 0;
     const hasFiltered = state.filteredEvents.length > 0;
 
+    // ابتدا همه state ها را ریست می‌کنیم
     els.listErrorState.hidden = true;
     els.listState.hidden = true;
 
-    if (hasEvents && !hasFiltered) {
-      els.listState.hidden = false;
-      els.listState.querySelector(".empty-state-title").textContent = "نتیجه‌ای پیدا نشد";
-      els.listState.querySelector(".empty-state-text").textContent = "فیلتر یا جستجو را تغییر بده.";
-      els.emptyAddBtn.hidden = true;
-    } else if (!hasEvents) {
+    if (!hasEvents) {
+      // هیچ رویدادی وجود ندارد
       els.listState.hidden = false;
       els.listState.querySelector(".empty-state-title").textContent = "هنوز رویدادی ثبت نشده";
       els.listState.querySelector(".empty-state-text").textContent =
         "اولین رویداد را اضافه کن تا یادآوری‌هایت را مستقیم در تلگرام دریافت کنی.";
       els.emptyAddBtn.hidden = false;
-    } else {
-      els.listState.hidden = true;
+    } else if (hasEvents && !hasFiltered) {
+      // رویداد هست ولی فیلتر/جستجو نتیجه نداد
+      els.listState.hidden = false;
+      els.listState.querySelector(".empty-state-title").textContent = "نتیجه‌ای پیدا نشد";
+      els.listState.querySelector(".empty-state-text").textContent = "فیلتر یا جستجو را تغییر بده.";
+      els.emptyAddBtn.hidden = true;
     }
+    // در غیر این صورت (hasEvents && hasFiltered) لیست نمایش داده می‌شه — listState پنهان می‌مونه
   }
 
   function applyFilters() {
