@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 
 logger = logging.getLogger("tm_pro.auth")
 
-# ─── In-process fallback (فقط برای تست‌ها استفاده می‌شه) ───────────────────
+# ─── Fallback in-memory store (فقط برای تست یا وقتی DB در دسترس نیست) ──────
 _rate_store: dict[str, list[float]] = {}
 
 
@@ -26,12 +26,27 @@ def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
     return history
 
 
-# ─── Rate Limit با MongoDB (مقاوم در برابر multi-process) ─────────────────
+def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
+    """Fallback in-memory rate limit — فقط وقتی DB در دسترس نیست."""
+    history = _prune_rate_history(user_id)
+    if len(history) >= settings.rate_limit_count:
+        logger.warning("Rate limit exceeded (memory): user_id=%s", user_id)
+        raise HTTPException(status_code=429, detail="RATE_LIMIT")
+    history.append(time.time())
+    _rate_store[user_id] = history
+
+
+def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
+    """نسخه sync — فقط برای تست‌ها استفاده می‌شه."""
+    settings = settings or get_settings()
+    _check_rate_limit_memory(user_id, settings)
+
 
 async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
     """
-    Rate limit مبتنی بر MongoDB — بین تمام worker های Gunicorn مشترک است.
-    از collection ای با TTL index استفاده می‌کنه تا خودش پاک بشه.
+    Rate limit مبتنی بر MongoDB.
+    بین تمام worker های Gunicorn مشترک است.
+    از TTL index استفاده می‌کنه — خودش هر ۶۰ ثانیه پاک می‌شه.
     """
     try:
         from app.db import get_database
@@ -42,42 +57,28 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(seconds=window_seconds)
 
-        # پاک‌کردن رکوردهای قدیمی این کاربر و شمارش رکوردهای جدید
+        # حذف رکوردهای قدیمی این کاربر در پنجره زمانی
         await rate_coll.delete_many({"user_id": user_id, "ts": {"$lt": window_start}})
+
+        # شمارش تعداد درخواست‌های باقی‌مانده
         count = await rate_coll.count_documents({"user_id": user_id})
 
         if count >= settings.rate_limit_count:
             logger.warning("Rate limit exceeded (mongo): user_id=%s", user_id)
             raise HTTPException(status_code=429, detail="RATE_LIMIT")
 
-        # ثبت request جدید
+        # ثبت درخواست جدید
         await rate_coll.insert_one({"user_id": user_id, "ts": now})
 
     except HTTPException:
         raise
     except Exception as exc:
-        # اگه DB در دسترس نبود، به fallback در memory برمی‌گردیم
-        logger.warning("Rate limit mongo fallback due to error: %s", exc)
+        # اگه DB در دسترس نبود، به fallback memory برمی‌گردیم
+        logger.warning("Rate limit mongo unavailable, using memory fallback: %s", exc)
         _check_rate_limit_memory(user_id, settings)
 
 
-def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
-    """Fallback در memory — فقط وقتی DB در دسترس نیست."""
-    history = _prune_rate_history(user_id)
-    if len(history) >= settings.rate_limit_count:
-        logger.warning("Rate limit exceeded (memory): user_id=%s", user_id)
-        raise HTTPException(status_code=429, detail="RATE_LIMIT")
-    history.append(time.time())
-    _rate_store[user_id] = history
-
-
-def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
-    """همگام (sync) — فقط برای تست‌ها استفاده می‌شه."""
-    settings = settings or get_settings()
-    _check_rate_limit_memory(user_id, settings)
-
-
-# ─── توابع اصلی auth ────────────────────────────────────────────────────────
+# ─── توابع اصلی ─────────────────────────────────────────────────────────────
 
 def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {
@@ -178,7 +179,7 @@ async def validate_init_data(
     if not user_id or not user_id.isdigit():
         raise HTTPException(status_code=403, detail="INVALID_ID")
 
-    # Rate limit مبتنی بر MongoDB
+    # Rate limit مبتنی بر MongoDB (مشترک بین همه worker ها)
     await check_rate_limit_mongo(user_id, settings)
 
     return {
