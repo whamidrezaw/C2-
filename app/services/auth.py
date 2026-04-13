@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -14,6 +15,7 @@ from app.config import Settings, get_settings
 
 logger = logging.getLogger("tm_pro.auth")
 
+# ─── In-process fallback (فقط برای تست‌ها استفاده می‌شه) ───────────────────
 _rate_store: dict[str, list[float]] = {}
 
 
@@ -24,17 +26,58 @@ def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
     return history
 
 
-def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
-    settings = settings or get_settings()
+# ─── Rate Limit با MongoDB (مقاوم در برابر multi-process) ─────────────────
+
+async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
+    """
+    Rate limit مبتنی بر MongoDB — بین تمام worker های Gunicorn مشترک است.
+    از collection ای با TTL index استفاده می‌کنه تا خودش پاک بشه.
+    """
+    try:
+        from app.db import get_database
+        db = get_database()
+        rate_coll = db["rate_limits"]
+
+        window_seconds = 60
+        now = datetime.now(timezone.utc)
+        window_start = now - timedelta(seconds=window_seconds)
+
+        # پاک‌کردن رکوردهای قدیمی این کاربر و شمارش رکوردهای جدید
+        await rate_coll.delete_many({"user_id": user_id, "ts": {"$lt": window_start}})
+        count = await rate_coll.count_documents({"user_id": user_id})
+
+        if count >= settings.rate_limit_count:
+            logger.warning("Rate limit exceeded (mongo): user_id=%s", user_id)
+            raise HTTPException(status_code=429, detail="RATE_LIMIT")
+
+        # ثبت request جدید
+        await rate_coll.insert_one({"user_id": user_id, "ts": now})
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # اگه DB در دسترس نبود، به fallback در memory برمی‌گردیم
+        logger.warning("Rate limit mongo fallback due to error: %s", exc)
+        _check_rate_limit_memory(user_id, settings)
+
+
+def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
+    """Fallback در memory — فقط وقتی DB در دسترس نیست."""
     history = _prune_rate_history(user_id)
-
     if len(history) >= settings.rate_limit_count:
-        logger.warning("Rate limit exceeded: user_id=%s", user_id)
+        logger.warning("Rate limit exceeded (memory): user_id=%s", user_id)
         raise HTTPException(status_code=429, detail="RATE_LIMIT")
-
     history.append(time.time())
     _rate_store[user_id] = history
 
+
+def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
+    """همگام (sync) — فقط برای تست‌ها استفاده می‌شه."""
+    settings = settings or get_settings()
+    _check_rate_limit_memory(user_id, settings)
+
+
+# ─── توابع اصلی auth ────────────────────────────────────────────────────────
 
 def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {
@@ -85,6 +128,9 @@ def validate_auth_date(
     except ValueError as exc:
         raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE") from exc
 
+    if auth_date <= 0:
+        raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE")
+
     now = now_ts if now_ts is not None else int(time.time())
 
     if auth_date < now - max_age_seconds:
@@ -129,10 +175,11 @@ async def validate_init_data(
     user_data = parse_init_user(user_raw)
     user_id = str(user_data.get("id", ""))
 
-    if not user_id.isdigit():
+    if not user_id or not user_id.isdigit():
         raise HTTPException(status_code=403, detail="INVALID_ID")
 
-    check_rate_limit(user_id, settings)
+    # Rate limit مبتنی بر MongoDB
+    await check_rate_limit_mongo(user_id, settings)
 
     return {
         "user_id": user_id,
