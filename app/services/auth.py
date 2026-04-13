@@ -8,75 +8,35 @@ import time
 from typing import Any
 from urllib.parse import parse_qsl
 
-from fastapi import HTTPException, Request
-
-from app.config import Settings, get_settings
-
-logger = logging.getLogger("tm_pro.auth")
-
-_rate_store: dict[str, list[float]] = {}
-
-
-def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
-    now = time.time()
-    history = [t for t in _rate_store.get(user_id, []) if now - t < window_seconds]
-    _rate_store[user_id] = history
-    return history
-
-
-def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
-    settings = settings or get_settings()
-    history = _prune_rate_history(user_id)
-
-    if len(history) >= settings.rate_limit_count:
-        logger.warning("Rate limit exceeded: user_id=%s", user_id)
-        raise HTTPException(status_code=429, detail="RATE_LIMIT")
-
-    history.append(time.time())
-    _rate_store[user_id] = history
-
-
-def parse_init_data(init_data: str) -> dict[str, str]:
-    if not init_data:
-        raise HTTPException(status_code=403, detail="NO_DATA")
-
+def extract_hash_and_build_data_check_string(init_data: str) -> tuple[str, str, dict[str, str]]:
     parsed = dict(parse_qsl(init_data, keep_blank_values=True))
     if not parsed:
         raise HTTPException(status_code=403, detail="INVALID_INIT_DATA")
 
-    return parsed
+    received_hash = parsed.pop("hash", "")
+    parsed.pop("signature", None)
+
+    if not received_hash:
+        raise HTTPException(status_code=403, detail="NO_HASH")
+
+    data_check_string = "\n".join(
+        f"{key}={value}" for key, value in sorted(parsed.items(), key=lambda item: item[0])
+    )
+    return received_hash, data_check_string, parsed
 
 
-def build_data_check_string_from_raw(init_data: str) -> str:
-    pairs = []
-    for chunk in init_data.split("&"):
-        if not chunk:
-            continue
-        if chunk.startswith("hash="):
-            continue
-        if chunk.startswith("signature="):
-            continue
+def compute_telegram_hash(data_check_string: str, bot_token: str) -> str:
+    secret_key = hmac.new(
+        b"WebAppData",
+        bot_token.encode(),
+        hashlib.sha256,
+    ).digest()
 
-        key, sep, value = chunk.partition("=")
-        if not sep:
-            continue
-        pairs.append((key, value))
-
-    pairs.sort(key=lambda item: item[0])
-    return "\n".join(f"{key}={value}" for key, value in pairs)
-
-
-def extract_hash_from_raw(init_data: str) -> str | None:
-    for chunk in init_data.split("&"):
-        if chunk.startswith("hash="):
-            return chunk.partition("=")[2]
-    return None
-
-
-def compute_telegram_hash_from_raw(init_data: str, bot_token: str) -> str:
-    data_check_string = build_data_check_string_from_raw(init_data)
-    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def parse_init_user(user_raw: str) -> dict[str, Any]:
