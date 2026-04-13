@@ -439,7 +439,7 @@
     const payload = {
       title: els.title.value.trim(),
       date: els.date.value,
-      timezone: tg?.initDataUnsafe?.user?.language_code ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" : (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       repeat: els.repeat.value,
       category: els.category.value,
       note: els.note.value.trim(),
