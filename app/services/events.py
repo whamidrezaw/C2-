@@ -17,6 +17,7 @@ from app.schemas.responses import EventOut
 from app.utils.dates import expire_for_repeat, safe_zoneinfo, to_jalali, build_event_datetimes
 from app.utils.ids import safe_object_id
 
+PAGE_SIZE = 50
 
 VALID_REPEATS = {"none", "daily", "weekly", "monthly", "yearly"}
 VALID_CATEGORIES = {
@@ -105,33 +106,23 @@ async def list_events_for_user(
 ) -> tuple[list[EventOut], bool]:
     events_coll = get_events_collection()
 
-# ❌ فعلی — اگه دقیقاً ۵۰ رویداد باشه، has_more=True ولی صفحه بعد خالیه
-cursor = (
-    events_coll.find({"user_id": user_id})
-    .sort([("pinned", -1), ("event_ts_utc", 1)])
-    .skip(payload.skip)
-    .limit(50)
-)
-...
-has_more = len(items) == 50
+    # یکی اضافه می‌خونیم تا بفهمیم صفحه بعدی هست یا نه
+    cursor = (
+        events_coll.find({"user_id": user_id})
+        .sort([("pinned", -1), ("event_ts_utc", 1)])
+        .skip(payload.skip)
+        .limit(PAGE_SIZE + 1)
+    )
 
-# ✅ درست — یکی اضافه می‌خونیم تا بفهمیم صفحه بعد هست
-PAGE_SIZE = 50
-cursor = (
-    events_coll.find({"user_id": user_id})
-    .sort([("pinned", -1), ("event_ts_utc", 1)])
-    .skip(payload.skip)
-    .limit(PAGE_SIZE + 1)          # ← +1 اضافه شد
-)
+    items: list[EventOut] = []
+    async for event in cursor:
+        items.append(serialize_event(event))
 
-items: list[EventOut] = []
-async for event in cursor:
-    items.append(serialize_event(event))
+    has_more = len(items) > PAGE_SIZE
+    if has_more:
+        items = items[:PAGE_SIZE]  # آیتم اضافه را حذف می‌کنیم
 
-has_more = len(items) > PAGE_SIZE  # ← تغییر کرد
-if has_more:
-    items = items[:PAGE_SIZE]       # ← آیتم اضافه را حذف می‌کنیم
-return items, has_more
+    return items, has_more
 
 
 async def add_event_for_user(
