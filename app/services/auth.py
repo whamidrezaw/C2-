@@ -56,6 +56,7 @@ def build_data_check_string_from_raw(init_data: str) -> str:
             continue
         if chunk.startswith("signature="):
             continue
+
         key, sep, value = chunk.partition("=")
         if not sep:
             continue
@@ -158,10 +159,7 @@ async def validate_init_data(
     }
 
 
-async def get_authenticated_user_id(
-    request: Request,
-    init_data: str,
-    settings: Settings | None = None,
-) -> str:
-    auth_result = await validate_init_data(request, init_data, settings)
+async def get_authenticated_user_id(request: Request) -> str:
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    auth_result = await validate_init_data(request, init_data)
     return auth_result["user_id"]
