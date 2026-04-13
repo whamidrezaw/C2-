@@ -109,7 +109,7 @@ async def root() -> str:
 
 @app.get("/webapp", response_class=HTMLResponse)
 async def webapp(request: Request):
-    return templates.TemplateResponse("webapp.html", {"request": request})
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.post("/telegram/webhook")
