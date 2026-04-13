@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field, field_validator
+
+from app.schemas.common import APIModel, EventIdPayload, InitDataPayload
+
+RepeatType = Literal["none", "daily", "weekly", "monthly", "yearly"]
+CategoryType = Literal[
+    "general",
+    "birthday",
+    "work",
+    "family",
+    "health",
+    "travel",
+    "finance",
+    "study",
+    "other",
+]
+
+
+class ListEventsRequest(InitDataPayload):
+    skip: int = Field(default=0, ge=0, le=5000)
+
+
+class EventBaseRequest(InitDataPayload):
+    title: str = Field(..., min_length=1, max_length=200)
+    date: str = Field(..., min_length=10, max_length=10)
+    timezone: str = Field(default="UTC", min_length=1, max_length=128)
+    repeat: RepeatType = "none"
+    category: CategoryType = "general"
+    note: str = Field(default="", max_length=2000)
+    pinned: bool = False
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("date")
+    @classmethod
+    def validate_date_format(cls, value: str) -> str:
+        value = value.strip()
+        parts = value.split("-")
+        if len(parts) != 3 or any(not part.isdigit() for part in parts):
+            raise ValueError("date must be in YYYY-MM-DD format")
+        yyyy, mm, dd = parts
+        if len(yyyy) != 4 or len(mm) != 2 or len(dd) != 2:
+            raise ValueError("date must be in YYYY-MM-DD format")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        value = value.strip()
+        return value or "UTC"
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+class AddEventRequest(EventBaseRequest):
+    pass
+
+
+class EditEventRequest(EventBaseRequest):
+    event_id: str = Field(..., min_length=1, max_length=64)
+
+
+class DeleteEventRequest(EventIdPayload):
+    pass
+
+
+class SaveNoteRequest(EventIdPayload):
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+class PinEventRequest(EventIdPayload):
+    pinned: bool = False

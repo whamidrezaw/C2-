@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage / reports
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Local Mongo dumps / backups
+backups/
+dump/
+
+# Build artifacts
+dist/
+build/

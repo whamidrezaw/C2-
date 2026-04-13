@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fa-IR" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#3390ec">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="TimeManager Pro - Smart event reminders with Gregorian and Jalali dates for Telegram Mini Apps.">
+  <title>TimeManager Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <a href="#eventList" class="sr-only">Skip to content</a>
+
+  <noscript>
+    <div class="noscript-box">
+      <div class="noscript-icon">📅</div>
+      <p>برای استفاده از TimeManager Pro باید JavaScript فعال باشد.</p>
+      <p class="noscript-sub">Please enable JavaScript to use TimeManager Pro.</p>
+    </div>
+  </noscript>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">📅</div>
+      <div class="brand-copy">
+        <strong class="brand-title">TimeManager Pro</strong>
+        <span class="brand-subtitle">یادآور رویدادها در تلگرام</span>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      id="refreshBtn"
+      class="icon-btn"
+      aria-label="Refresh events"
+      title="Refresh"
+    >
+      ↻
+    </button>
+  </header>
+
+  <main id="eventList" class="app-main">
+    <section class="hero-card">
+      <div class="hero-copy">
+        <h1 class="hero-title">برنامه‌ریزی ساده، یادآوری مطمئن</h1>
+        <p class="hero-text">
+          رویدادها، تولدها، کارها و یادداشت‌ها را ثبت کن و یادآوری‌شان را مستقیم در تلگرام بگیر.
+        </p>
+      </div>
+
+      <div class="hero-meta">
+        <div class="meta-pill">
+          <span class="meta-pill-label">وضعیت</span>
+          <strong id="syncStatus">آماده</strong>
+        </div>
+        <div class="meta-pill">
+          <span class="meta-pill-label">رویدادها</span>
+          <strong id="eventCount">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="toolbar" aria-label="Actions and filters">
+      <div class="toolbar-row">
+        <button type="button" class="seg-btn is-active" data-filter="all">همه</button>
+        <button type="button" class="seg-btn" data-filter="pinned">سنجاق‌شده</button>
+        <button type="button" class="seg-btn" data-filter="birthday">تولد</button>
+        <button type="button" class="seg-btn" data-filter="work">کار</button>
+      </div>
+
+      <label class="search-wrap" for="searchInput">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          id="searchInput"
+          class="search-input"
+          placeholder="جستجو در عنوان یا یادداشت..."
+          autocomplete="off"
+          inputmode="search"
+        >
+      </label>
+    </section>
+
+    <section id="listState" class="empty-state" hidden>
+      <div class="empty-state-icon" aria-hidden="true">🗓️</div>
+      <h2 class="empty-state-title">هنوز رویدادی ثبت نشده</h2>
+      <p class="empty-state-text">
+        اولین رویداد را اضافه کن تا یادآوری‌هایت را مستقیم در تلگرام دریافت کنی.
+      </p>
+      <button type="button" id="emptyAddBtn" class="btn-primary">
+        ＋ افزودن اولین رویداد
+      </button>
+    </section>
+
+    <section id="listErrorState" class="empty-state is-error" hidden>
+      <div class="empty-state-icon" aria-hidden="true">⚠️</div>
+      <h2 class="empty-state-title">بارگذاری انجام نشد</h2>
+      <p class="empty-state-text">ارتباط با سرور برقرار نشد یا احراز هویت Mini App معتبر نبود.</p>
+      <button type="button" id="retryBtn" class="btn-primary">تلاش دوباره</button>
+    </section>
+
+    <section
+      id="eventsWrap"
+      class="events-wrap"
+      aria-live="polite"
+      aria-label="فهرست رویدادها"
+    ></section>
+  </main>
+
+  <button
+    type="button"
+    id="openComposerBtn"
+    class="floating-add-btn"
+    aria-label="افزودن رویداد"
+    aria-controls="composerSheet"
+    aria-expanded="false"
+  >
+    <span aria-hidden="true">＋</span>
+    <span>افزودن رویداد</span>
+  </button>
+
+  <div
+    id="sheetOverlay"
+    class="sheet-overlay"
+    hidden
+    aria-hidden="true"
+  ></div>
+
+  <section
+    id="composerSheet"
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="composerTitle"
+    aria-hidden="true"
+    hidden
+  >
+    <div class="sheet-handle" aria-hidden="true"></div>
+
+    <div class="sheet-head">
+      <div>
+        <h2 id="composerTitle" class="sheet-title">رویداد جدید</h2>
+        <p id="composerSubtitle" class="sheet-subtitle">عنوان، تاریخ و نوع تکرار را مشخص کن.</p>
+      </div>
+
+      <button type="button" id="closeComposerX" class="icon-btn" aria-label="بستن فرم">✕</button>
+    </div>
+
+    <form id="eventForm" class="sheet-form" novalidate>
+      <input type="hidden" id="eventId">
+
+      <div class="field-group">
+        <label class="field-label" for="title">عنوان رویداد</label>
+        <input
+          type="text"
+          id="title"
+          class="field-input"
+          placeholder="مثلاً تولد مامان"
+          maxlength="200"
+          autocomplete="off"
+          required
+        >
+      </div>
+
+      <div class="grid-2">
+        <div class="field-group">
+          <label class="field-label" for="date">تاریخ میلادی</label>
+          <input
+            type="date"
+            id="date"
+            class="field-input"
+            required
+          >
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="date-jalali">تاریخ شمسی</label>
+          <input
+            type="text"
+            id="date-jalali"
+            class="field-input"
+            placeholder="1405/01/31"
+            maxlength="10"
+            inputmode="numeric"
+            autocomplete="off"
+            dir="ltr"
+          >
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field-group">
+          <label class="field-label" for="repeat">تکرار</label>
+          <select id="repeat" class="field-input">
+            <option value="none">یک‌بار</option>
+            <option value="daily">روزانه</option>
+            <option value="weekly">هفتگی</option>
+            <option value="monthly">ماهانه</option>
+            <option value="yearly">سالانه</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="category">دسته‌بندی</label>
+          <select id="category" class="field-input">
+            <option value="general">عمومی</option>
+            <option value="birthday">تولد</option>
+            <option value="work">کار</option>
+            <option value="family">خانواده</option>
+            <option value="health">سلامت</option>
+            <option value="travel">سفر</option>
+            <option value="finance">مالی</option>
+            <option value="study">مطالعه</option>
+            <option value="other">سایر</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="check-row" for="pin">
+        <input type="checkbox" id="pin">
+        <span>این رویداد بالای لیست سنجاق شود</span>
+      </label>
+
+      <div class="field-group">
+        <label class="field-label" for="note">یادداشت</label>
+        <textarea
+          id="note"
+          class="field-input field-textarea"
+          rows="5"
+          maxlength="2000"
+          placeholder="کارها، توضیحات یا چک‌لیست این رویداد را اینجا بنویس..."
+        ></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="cancelBtn" class="btn-secondary">انصراف</button>
+        <button type="submit" id="saveEventBtn" class="btn-primary">ذخیره رویداد</button>
+      </div>
+    </form>
+  </section>
+
+  <section
+    id="detailSheet"
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="detailTitle"
+    aria-hidden="true"
+    hidden
+  >
+    <div class="sheet-handle" aria-hidden="true"></div>
+
+    <div class="sheet-head">
+      <div>
+        <h2 id="detailTitle" class="sheet-title">جزئیات رویداد</h2>
+        <p id="detailSubtitle" class="sheet-subtitle">نمایش کامل و عملیات رویداد</p>
+      </div>
+
+      <button type="button" id="closeDetailX" class="icon-btn" aria-label="بستن جزئیات">✕</button>
+    </div>
+
+    <article class="detail-card">
+      <div class="detail-topline">
+        <span id="detailCategoryBadge" class="badge">عمومی</span>
+        <span id="detailRepeatBadge" class="badge badge-muted">یک‌بار</span>
+      </div>
+
+      <h3 id="detailEventTitle" class="detail-event-title">—</h3>
+
+      <div class="detail-meta-grid">
+        <div class="detail-meta-box">
+          <span class="detail-meta-label">میلادی</span>
+          <strong id="detailDateIso">—</strong>
+        </div>
+        <div class="detail-meta-box">
+          <span class="detail-meta-label">شمسی</span>
+          <strong id="detailDateJalali">—</strong>
+        </div>
+        <div class="detail-meta-box">
+          <span class="detail-meta-label">منطقه زمانی</span>
+          <strong id="detailTimezone">—</strong>
+        </div>
+        <div class="detail-meta-box">
+          <span class="detail-meta-label">وضعیت</span>
+          <strong id="detailStatus">—</strong>
+        </div>
+      </div>
+
+      <div class="detail-actions">
+        <button type="button" id="detailEditBtn" class="btn-secondary">ویرایش</button>
+        <button type="button" id="detailShareBtn" class="btn-secondary">اشتراک‌گذاری</button>
+        <button type="button" id="detailPinBtn" class="btn-secondary">سنجاق</button>
+        <button type="button" id="detailDeleteBtn" class="btn-danger">حذف</button>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="detailNote">یادداشت رویداد</label>
+        <textarea
+          id="detailNote"
+          class="field-input field-textarea"
+          rows="7"
+          maxlength="2000"
+          placeholder="برای این رویداد یادداشت بنویس..."
+        ></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" id="detailNoteCancelBtn" class="btn-secondary">بازنشانی</button>
+        <button type="button" id="detailNoteSaveBtn" class="btn-primary">ذخیره یادداشت</button>
+      </div>
+    </article>
+  </section>
+
+  <div
+    id="toast"
+    class="toast"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  ></div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
