@@ -97,41 +97,52 @@ def calc_next_notify(
         microsecond=0,
     )
 
-# daily
-for _ in range(3650):   # حداکثر ۱۰ سال
-    if candidate > now_local:
-        break
-    candidate += timedelta(days=1)
-else:
-    return None
+    if repeat == "daily":
+        # حداکثر ۳۶۵۰ بار = ۱۰ سال آینده کافیه
+        for _ in range(3650):
+            if candidate > now_local:
+                break
+            candidate += timedelta(days=1)
+        else:
+            logger.error("calc_next_notify daily loop exceeded max iterations for base=%s", base_date)
+            return None
 
-# weekly
-for _ in range(520):    # حداکثر ۱۰ سال
-    if candidate > now_local:
-        break
-    candidate += timedelta(weeks=1)
-else:
-    return None
+    elif repeat == "weekly":
+        # حداکثر ۵۲۰ بار = ۱۰ سال آینده کافیه
+        for _ in range(520):
+            if candidate > now_local:
+                break
+            candidate += timedelta(weeks=1)
+        else:
+            logger.error("calc_next_notify weekly loop exceeded max iterations for base=%s", base_date)
+            return None
 
-# ✅ درست — حداکثر ۱۵۰۰ بار تکرار (بیش از ۱۰۰ سال آینده کافیه)
-elif repeat == "monthly":
-    for _ in range(1500):
-        if candidate > now_local:
-            break
-        candidate = month_candidate(candidate, candidate.day, 1)
+    elif repeat == "monthly":
+        # حداکثر ۱۵۰۰ بار = بیش از ۱۰۰ سال آینده کافیه
+        for _ in range(1500):
+            if candidate > now_local:
+                break
+            candidate = month_candidate(candidate, candidate.day, 1)
+        else:
+            logger.error("calc_next_notify monthly loop exceeded max iterations for base=%s", base_date)
+            return None
+
+    elif repeat == "yearly":
+        # حداکثر ۲۰۰ بار = ۲۰۰ سال آینده کافیه
+        for _ in range(200):
+            if candidate > now_local:
+                break
+            try:
+                candidate = candidate.replace(year=candidate.year + 1)
+            except ValueError:
+                # ۲۹ فوریه در سال کبیسه
+                candidate = candidate.replace(year=candidate.year + 1, month=3, day=1)
+        else:
+            logger.error("calc_next_notify yearly loop exceeded max iterations for base=%s", base_date)
+            return None
+
     else:
-        logger.error("calc_next_notify monthly loop exceeded max iterations")
         return None
-# yearly
-for _ in range(200):    # حداکثر ۲۰۰ سال
-    if candidate > now_local:
-        break
-    try:
-        candidate = candidate.replace(year=candidate.year + 1)
-    except ValueError:
-        candidate = candidate.replace(year=candidate.year + 1, month=3, day=1)
-else:
-    return None
 
     return candidate.astimezone(timezone.utc)
 
