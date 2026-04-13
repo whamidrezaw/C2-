@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -41,33 +42,21 @@ class EventBaseRequest(InitDataPayload):
             raise ValueError("title must not be empty")
         return value
 
-# ❌ فعلی — "2026-13-45" رد نمی‌شه
-@field_validator("date")
-@classmethod
-def validate_date_format(cls, value: str) -> str:
-    value = value.strip()
-    parts = value.split("-")
-    if len(parts) != 3 or any(not part.isdigit() for part in parts):
-        raise ValueError("date must be in YYYY-MM-DD format")
-    yyyy, mm, dd = parts
-    if len(yyyy) != 4 or len(mm) != 2 or len(dd) != 2:
-        raise ValueError("date must be in YYYY-MM-DD format")
-    return value
+    @field_validator("date")
+    @classmethod
+    def validate_date_format(cls, value: str) -> str:
+        value = value.strip()
+        # تاریخ واقعی را چک می‌کنه — "2026-13-45" رد می‌شه
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("date must be a valid date in YYYY-MM-DD format")
 
-# ✅ درست — تاریخ واقعی چک می‌شه
-@field_validator("date")
-@classmethod
-def validate_date_format(cls, value: str) -> str:
-    from datetime import datetime
-    value = value.strip()
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%d")
-    except ValueError:
-        raise ValueError("date must be a valid date in YYYY-MM-DD format")
-    # محدودیت سال معقول
-    if not (1900 <= parsed.year <= 2200):
-        raise ValueError("year must be between 1900 and 2200")
-    return value
+        # محدودیت سال معقول
+        if not (1900 <= parsed.year <= 2200):
+            raise ValueError("year must be between 1900 and 2200")
+
+        return value
 
     @field_validator("timezone")
     @classmethod
