@@ -105,19 +105,33 @@ async def list_events_for_user(
 ) -> tuple[list[EventOut], bool]:
     events_coll = get_events_collection()
 
-    cursor = (
-        events_coll.find({"user_id": user_id})
-        .sort([("pinned", -1), ("event_ts_utc", 1)])
-        .skip(payload.skip)
-        .limit(50)
-    )
+# ❌ فعلی — اگه دقیقاً ۵۰ رویداد باشه، has_more=True ولی صفحه بعد خالیه
+cursor = (
+    events_coll.find({"user_id": user_id})
+    .sort([("pinned", -1), ("event_ts_utc", 1)])
+    .skip(payload.skip)
+    .limit(50)
+)
+...
+has_more = len(items) == 50
 
-    items: list[EventOut] = []
-    async for event in cursor:
-        items.append(serialize_event(event))
+# ✅ درست — یکی اضافه می‌خونیم تا بفهمیم صفحه بعد هست
+PAGE_SIZE = 50
+cursor = (
+    events_coll.find({"user_id": user_id})
+    .sort([("pinned", -1), ("event_ts_utc", 1)])
+    .skip(payload.skip)
+    .limit(PAGE_SIZE + 1)          # ← +1 اضافه شد
+)
 
-    has_more = len(items) == 50
-    return items, has_more
+items: list[EventOut] = []
+async for event in cursor:
+    items.append(serialize_event(event))
+
+has_more = len(items) > PAGE_SIZE  # ← تغییر کرد
+if has_more:
+    items = items[:PAGE_SIZE]       # ← آیتم اضافه را حذف می‌کنیم
+return items, has_more
 
 
 async def add_event_for_user(
