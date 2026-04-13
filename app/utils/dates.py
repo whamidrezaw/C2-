@@ -103,9 +103,15 @@ def calc_next_notify(
     elif repeat == "weekly":
         while candidate <= now_local:
             candidate += timedelta(weeks=1)
-    elif repeat == "monthly":
-        while candidate <= now_local:
-            candidate = month_candidate(candidate, candidate.day, 1)
+# ✅ درست — حداکثر ۱۵۰۰ بار تکرار (بیش از ۱۰۰ سال آینده کافیه)
+elif repeat == "monthly":
+    for _ in range(1500):
+        if candidate > now_local:
+            break
+        candidate = month_candidate(candidate, candidate.day, 1)
+    else:
+        logger.error("calc_next_notify monthly loop exceeded max iterations")
+        return None
     elif repeat == "yearly":
         while candidate <= now_local:
             next_year = candidate.year + 1
