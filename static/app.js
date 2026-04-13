@@ -1,4 +1,34 @@
 (() => {
+  // ✅ DEBUG - همه چیز رو لاگ کن
+  console.log("=== TimeManager Pro Debug ===");
+  console.log("window.Telegram:", window.Telegram);
+  console.log("window.Telegram?.WebApp:", window.Telegram?.WebApp);
+  
+  const tg = window.Telegram?.WebApp || null;
+  console.log("tg object:", tg);
+  console.log("tg.initData:", tg?.initData);
+  console.log("tg.initData length:", tg?.initData?.length);
+  
+  if (tg?.initData) {
+    console.log("initData (first 100 chars):", tg.initData.substring(0, 100));
+  }
+  
+  console.log("==============================");
+
+  const state = {
+    events: [],
+    filteredEvents: [],
+    currentFilter: "all",
+    searchTerm: "",
+    activeSheet: null,
+    detailEventId: null,
+    editingEventId: null,
+    lastFocusedElement: null,
+    initData: tg?.initData || "",
+  };
+
+  // ... ادامه کد
+(() => {
   const tg = window.Telegram?.WebApp || null;
 
   const state = {
