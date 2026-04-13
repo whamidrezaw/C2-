@@ -121,13 +121,9 @@ async def validate_init_data(
     if not settings.bot_token:
         raise HTTPException(status_code=500, detail="MISCONFIGURED")
 
-    parsed = parse_init_data(init_data)
+    received_hash, data_check_string, parsed = extract_hash_and_build_data_check_string(init_data)
 
-    received_hash = extract_hash_from_raw(init_data)
-    if not received_hash:
-        raise HTTPException(status_code=403, detail="NO_HASH")
-
-    computed_hash = compute_telegram_hash_from_raw(init_data, settings.bot_token)
+    computed_hash = compute_telegram_hash(data_check_string, settings.bot_token)
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
         logger.warning("Bad Telegram initData HMAC: ip=%s", client_ip)
