@@ -97,12 +97,22 @@ def calc_next_notify(
         microsecond=0,
     )
 
-    if repeat == "daily":
-        while candidate <= now_local:
-            candidate += timedelta(days=1)
-    elif repeat == "weekly":
-        while candidate <= now_local:
-            candidate += timedelta(weeks=1)
+# daily
+for _ in range(3650):   # حداکثر ۱۰ سال
+    if candidate > now_local:
+        break
+    candidate += timedelta(days=1)
+else:
+    return None
+
+# weekly
+for _ in range(520):    # حداکثر ۱۰ سال
+    if candidate > now_local:
+        break
+    candidate += timedelta(weeks=1)
+else:
+    return None
+
 # ✅ درست — حداکثر ۱۵۰۰ بار تکرار (بیش از ۱۰۰ سال آینده کافیه)
 elif repeat == "monthly":
     for _ in range(1500):
@@ -112,15 +122,16 @@ elif repeat == "monthly":
     else:
         logger.error("calc_next_notify monthly loop exceeded max iterations")
         return None
-    elif repeat == "yearly":
-        while candidate <= now_local:
-            next_year = candidate.year + 1
-            try:
-                candidate = candidate.replace(year=next_year)
-            except ValueError:
-                candidate = candidate.replace(year=next_year, month=3, day=1)
-    else:
-        return None
+# yearly
+for _ in range(200):    # حداکثر ۲۰۰ سال
+    if candidate > now_local:
+        break
+    try:
+        candidate = candidate.replace(year=candidate.year + 1)
+    except ValueError:
+        candidate = candidate.replace(year=candidate.year + 1, month=3, day=1)
+else:
+    return None
 
     return candidate.astimezone(timezone.utc)
 
