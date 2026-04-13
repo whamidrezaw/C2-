@@ -8,7 +8,37 @@ import time
 from typing import Any
 from urllib.parse import parse_qsl
 
-def extract_hash_and_build_data_check_string(init_data: str) -> tuple[str, str, dict[str, str]]:
+from fastapi import HTTPException, Request
+
+from app.config import Settings, get_settings
+
+logger = logging.getLogger("tm_pro.auth")
+
+_rate_store: dict[str, list[float]] = {}
+
+
+def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
+    now = time.time()
+    history = [t for t in _rate_store.get(user_id, []) if now - t < window_seconds]
+    _rate_store[user_id] = history
+    return history
+
+
+def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
+    settings = settings or get_settings()
+    history = _prune_rate_history(user_id)
+
+    if len(history) >= settings.rate_limit_count:
+        logger.warning("Rate limit exceeded: user_id=%s", user_id)
+        raise HTTPException(status_code=429, detail="RATE_LIMIT")
+
+    history.append(time.time())
+    _rate_store[user_id] = history
+
+
+def extract_hash_and_build_data_check_string(
+    init_data: str,
+) -> tuple[str, str, dict[str, str]]:
     parsed = dict(parse_qsl(init_data, keep_blank_values=True))
     if not parsed:
         raise HTTPException(status_code=403, detail="INVALID_INIT_DATA")
@@ -28,13 +58,13 @@ def extract_hash_and_build_data_check_string(init_data: str) -> tuple[str, str, 
 def compute_telegram_hash(data_check_string: str, bot_token: str) -> str:
     secret_key = hmac.new(
         b"WebAppData",
-        bot_token.encode(),
+        bot_token.encode("utf-8"),
         hashlib.sha256,
     ).digest()
 
     return hmac.new(
         secret_key,
-        data_check_string.encode(),
+        data_check_string.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
 
@@ -71,6 +101,18 @@ def validate_auth_date(
         raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE")
 
 
+def extract_init_data_from_request(request: Request) -> str:
+    init_data = request.headers.get("X-Telegram-Init-Data", "").strip()
+    if init_data:
+        return init_data
+
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.lower().startswith("tma "):
+        return auth_header[4:].strip()
+
+    raise HTTPException(status_code=403, detail="NO_INIT_DATA")
+
+
 async def validate_init_data(
     request: Request,
     init_data: str,
@@ -81,7 +123,9 @@ async def validate_init_data(
     if not settings.bot_token:
         raise HTTPException(status_code=500, detail="MISCONFIGURED")
 
-    received_hash, data_check_string, parsed = extract_hash_and_build_data_check_string(init_data)
+    received_hash, data_check_string, parsed = extract_hash_and_build_data_check_string(
+        init_data
+    )
 
     computed_hash = compute_telegram_hash(data_check_string, settings.bot_token)
     if not hmac.compare_digest(computed_hash, received_hash):
@@ -100,7 +144,7 @@ async def validate_init_data(
         raise HTTPException(status_code=403, detail="NO_USER")
 
     user_data = parse_init_user(user_raw)
-    user_id = str(user_data.get("id", ""))
+    user_id = str(user_data.get("id", "")).strip()
 
     if not user_id.isdigit():
         raise HTTPException(status_code=403, detail="INVALID_ID")
@@ -116,6 +160,6 @@ async def validate_init_data(
 
 
 async def get_authenticated_user_id(request: Request) -> str:
-    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    init_data = extract_init_data_from_request(request)
     auth_result = await validate_init_data(request, init_data)
     return auth_result["user_id"]
