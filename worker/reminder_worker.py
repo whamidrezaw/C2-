@@ -45,11 +45,26 @@ async def worker_loop() -> None:
         logger.info("Reminder worker stopped")
 
 
+import signal
+
 def main() -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    def _handle_signal(sig: int, frame: object) -> None:
+        logger.info("Reminder worker received signal %s, shutting down...", sig)
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
     try:
-        asyncio.run(worker_loop())
-    except KeyboardInterrupt:
-        logger.info("Reminder worker interrupted by user")
+        loop.run_until_complete(worker_loop())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Reminder worker stopped cleanly")
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":
