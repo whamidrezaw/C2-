@@ -82,7 +82,10 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     await events.create_index([("notify_status", 1), ("processing_started_at", 1)])
 
     logger.info("MongoDB indexes ensured for app=%s", settings.app_name)
-
+# ─── Rate limits TTL index (خودکار پاک می‌شه بعد از ۶۰ ثانیه) ───
+rate_limits = get_database()["rate_limits"]
+await rate_limits.create_index("ts", expireAfterSeconds=60)
+await rate_limits.create_index("user_id")
 
 async def ping_database() -> bool:
     db = get_database()
