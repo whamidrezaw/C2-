@@ -1,4 +1,5 @@
-
+(() => {
+  const tg = window.Telegram?.WebApp || null;
 
   function fatal(message) {
     console.error("[TM_FATAL]", message);
@@ -31,9 +32,17 @@
     return;
   }
 
-
-
-  const els = {
+  const state = {
+    events: [],
+    filteredEvents: [],
+    currentFilter: "all",
+    searchTerm: "",
+    activeSheet: null,
+    detailEventId: null,
+    editingEventId: null,
+    lastFocusedElement: null,
+    initData,
+  };
 
   const els = {
     syncStatus: document.getElementById("syncStatus"),
@@ -115,11 +124,7 @@
   };
 
   function initTelegram() {
-    if (!tg) return;
-
     try {
-      tg.ready();
-      tg.expand();
       applyTelegramTheme();
       if (typeof tg.setHeaderColor === "function") {
         tg.setHeaderColor("secondary_bg_color");
@@ -147,7 +152,7 @@
   }
 
   function setSyncStatus(text) {
-    els.syncStatus.textContent = text;
+    if (els.syncStatus) els.syncStatus.textContent = text;
   }
 
   function setLoading(loading) {
@@ -156,19 +161,22 @@
   }
 
   function showToast(message, type = "info") {
-    const toast = els.toast;
-    toast.textContent = message;
-    toast.dataset.type = type;
-    toast.classList.add("is-visible");
+    if (!els.toast) {
+      alert(message);
+      return;
+    }
+    els.toast.textContent = message;
+    els.toast.dataset.type = type;
+    els.toast.classList.add("is-visible");
 
     window.clearTimeout(showToast._t);
     showToast._t = window.setTimeout(() => {
-      toast.classList.remove("is-visible");
+      els.toast.classList.remove("is-visible");
     }, 2400);
   }
 
   function getInitData() {
-    return state.initData || tg?.initData || "";
+    return state.initData;
   }
 
   async function apiPost(path, payload) {
@@ -185,6 +193,8 @@
     try {
       data = await response.json();
     } catch (_) {}
+
+    console.log("[DEBUG] POST", path, "status=", response.status, "data=", data);
 
     if (!response.ok) {
       const detail = data?.detail || "REQUEST_FAILED";
@@ -207,31 +217,33 @@
       RATE_LIMIT: "تعداد درخواست‌ها زیاد است. چند لحظه بعد دوباره تلاش کن.",
       NOT_FOUND_OR_UNAUTHORIZED: "این رویداد پیدا نشد یا دسترسی آن را نداری.",
       REQUEST_FAILED: "درخواست انجام نشد.",
+      NO_HASH: "داده احراز هویت تلگرام ناقص است.",
+      NO_USER: "اطلاعات کاربر از تلگرام دریافت نشد.",
+      INVALID_AUTH_DATE: "زمان احراز هویت معتبر نیست.",
+      INVALID_INIT_DATA: "داده دریافتی از تلگرام معتبر نیست.",
+      MISCONFIGURED: "تنظیمات سرور کامل نیست.",
     };
-    return map[detail] || "خطایی رخ داد. دوباره تلاش کن.";
+    return map[detail] || `خطایی رخ داد: ${detail || "UNKNOWN"}`;
   }
 
   async function loadEvents() {
     setLoading(true);
-    els.listErrorState.hidden = true;
+    if (els.listErrorState) els.listErrorState.hidden = true;
 
     try {
       const data = await apiPost("/api/list", { skip: 0 });
       state.events = Array.isArray(data.targets) ? data.targets : [];
-      state.detailEventId = state.events.some((item) => item.id === state.detailEventId)
-        ? state.detailEventId
-        : null;
-
-      applyFilters();
+      state.filteredEvents = [...state.events];
       renderEvents();
       updateCounters();
       showEmptyOrError();
     } catch (error) {
+      console.error("[DEBUG] loadEvents failed:", error);
       state.events = [];
       state.filteredEvents = [];
       renderEvents();
-      els.listState.hidden = true;
-      els.listErrorState.hidden = false;
+      if (els.listState) els.listState.hidden = true;
+      if (els.listErrorState) els.listErrorState.hidden = false;
       showToast(normalizeErrorMessage(error), "error");
       setSyncStatus("خطا");
     } finally {
@@ -240,32 +252,33 @@
   }
 
   function updateCounters() {
-    els.eventCount.textContent = String(state.events.length);
+    if (els.eventCount) els.eventCount.textContent = String(state.events.length);
   }
 
   function showEmptyOrError() {
+    if (!els.listState) return;
+
     const hasEvents = state.events.length > 0;
     const hasFiltered = state.filteredEvents.length > 0;
 
-    // ابتدا همه state ها را ریست می‌کنیم
-    els.listErrorState.hidden = true;
+    if (els.listErrorState) els.listErrorState.hidden = true;
     els.listState.hidden = true;
 
     if (!hasEvents) {
-      // هیچ رویدادی وجود ندارد
       els.listState.hidden = false;
-      els.listState.querySelector(".empty-state-title").textContent = "هنوز رویدادی ثبت نشده";
-      els.listState.querySelector(".empty-state-text").textContent =
-        "اولین رویداد را اضافه کن تا یادآوری‌هایت را مستقیم در تلگرام دریافت کنی.";
-      els.emptyAddBtn.hidden = false;
+      const title = els.listState.querySelector(".empty-state-title");
+      const text = els.listState.querySelector(".empty-state-text");
+      if (title) title.textContent = "هنوز رویدادی ثبت نشده";
+      if (text) text.textContent = "اولین رویداد را اضافه کن تا یادآوری‌هایت را مستقیم در تلگرام دریافت کنی.";
+      if (els.emptyAddBtn) els.emptyAddBtn.hidden = false;
     } else if (hasEvents && !hasFiltered) {
-      // رویداد هست ولی فیلتر/جستجو نتیجه نداد
       els.listState.hidden = false;
-      els.listState.querySelector(".empty-state-title").textContent = "نتیجه‌ای پیدا نشد";
-      els.listState.querySelector(".empty-state-text").textContent = "فیلتر یا جستجو را تغییر بده.";
-      els.emptyAddBtn.hidden = true;
+      const title = els.listState.querySelector(".empty-state-title");
+      const text = els.listState.querySelector(".empty-state-text");
+      if (title) title.textContent = "نتیجه‌ای پیدا نشد";
+      if (text) text.textContent = "فیلتر یا جستجو را تغییر بده.";
+      if (els.emptyAddBtn) els.emptyAddBtn.hidden = true;
     }
-    // در غیر این صورت (hasEvents && hasFiltered) لیست نمایش داده می‌شه — listState پنهان می‌مونه
   }
 
   function applyFilters() {
@@ -287,6 +300,8 @@
   }
 
   function renderEvents() {
+    if (!els.eventsWrap) return;
+
     const wrap = els.eventsWrap;
     wrap.innerHTML = "";
 
@@ -346,16 +361,20 @@
   function openSheet(name, focusTarget = null) {
     state.lastFocusedElement = document.activeElement;
 
-    els.sheetOverlay.hidden = false;
+    if (els.sheetOverlay) els.sheetOverlay.hidden = false;
 
     [els.composerSheet, els.detailSheet].forEach((sheet) => {
+      if (!sheet) return;
       const active = sheet.id === name;
       sheet.hidden = !active;
       sheet.setAttribute("aria-hidden", String(!active));
     });
 
     state.activeSheet = name;
-    els.openComposerBtn.setAttribute("aria-expanded", String(name === "composerSheet"));
+
+    if (els.openComposerBtn) {
+      els.openComposerBtn.setAttribute("aria-expanded", String(name === "composerSheet"));
+    }
 
     updateTelegramBackButton();
 
@@ -366,13 +385,18 @@
 
   function closeSheets() {
     [els.composerSheet, els.detailSheet].forEach((sheet) => {
+      if (!sheet) return;
       sheet.hidden = true;
       sheet.setAttribute("aria-hidden", "true");
     });
 
-    els.sheetOverlay.hidden = true;
+    if (els.sheetOverlay) els.sheetOverlay.hidden = true;
     state.activeSheet = null;
-    els.openComposerBtn.setAttribute("aria-expanded", "false");
+
+    if (els.openComposerBtn) {
+      els.openComposerBtn.setAttribute("aria-expanded", "false");
+    }
+
     updateTelegramBackButton();
 
     if (state.lastFocusedElement && typeof state.lastFocusedElement.focus === "function") {
@@ -394,20 +418,19 @@
   }
 
   function handleTelegramBack() {
-    if (state.activeSheet) {
-      closeSheets();
-    }
+    if (state.activeSheet) closeSheets();
   }
 
   function resetComposerForm() {
+    if (!els.eventForm) return;
     els.eventForm.reset();
-    els.eventId.value = "";
-    els.pin.checked = false;
-    els.dateJalali.value = "";
+    if (els.eventId) els.eventId.value = "";
+    if (els.pin) els.pin.checked = false;
+    if (els.dateJalali) els.dateJalali.value = "";
     state.editingEventId = null;
-    els.composerTitle.textContent = "رویداد جدید";
-    els.composerSubtitle.textContent = "عنوان، تاریخ و نوع تکرار را مشخص کن.";
-    els.saveEventBtn.textContent = "ذخیره رویداد";
+    if (els.composerTitle) els.composerTitle.textContent = "رویداد جدید";
+    if (els.composerSubtitle) els.composerSubtitle.textContent = "عنوان، تاریخ و نوع تکرار را مشخص کن.";
+    if (els.saveEventBtn) els.saveEventBtn.textContent = "ذخیره رویداد";
   }
 
   function openCreateComposer() {
@@ -417,20 +440,17 @@
 
   function openEditComposer(event) {
     state.editingEventId = event.id;
-
-    els.eventId.value = event.id;
-    els.title.value = event.title || "";
-    els.date.value = event.date_iso || "";
-    els.dateJalali.value = event.date_jalali || "";
-    els.repeat.value = event.repeat || "none";
-    els.category.value = event.category || "general";
-    els.pin.checked = !!event.pinned;
-    els.note.value = event.note || "";
-
-    els.composerTitle.textContent = "ویرایش رویداد";
-    els.composerSubtitle.textContent = "اطلاعات رویداد را به‌روزرسانی کن.";
-    els.saveEventBtn.textContent = "ذخیره تغییرات";
-
+    if (els.eventId) els.eventId.value = event.id;
+    if (els.title) els.title.value = event.title || "";
+    if (els.date) els.date.value = event.date_iso || "";
+    if (els.dateJalali) els.dateJalali.value = event.date_jalali || "";
+    if (els.repeat) els.repeat.value = event.repeat || "none";
+    if (els.category) els.category.value = event.category || "general";
+    if (els.pin) els.pin.checked = !!event.pinned;
+    if (els.note) els.note.value = event.note || "";
+    if (els.composerTitle) els.composerTitle.textContent = "ویرایش رویداد";
+    if (els.composerSubtitle) els.composerSubtitle.textContent = "اطلاعات رویداد را به‌روزرسانی کن.";
+    if (els.saveEventBtn) els.saveEventBtn.textContent = "ذخیره تغییرات";
     openSheet("composerSheet", els.title);
   }
 
@@ -444,15 +464,15 @@
 
     state.detailEventId = eventId;
 
-    els.detailEventTitle.textContent = event.title || "—";
-    els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "عمومی";
-    els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "یک‌بار";
-    els.detailDateIso.textContent = event.date_iso || "—";
-    els.detailDateJalali.textContent = event.date_jalali || "—";
-    els.detailTimezone.textContent = event.tz_name || "UTC";
-    els.detailStatus.textContent = STATUS_LABELS[event.notify_status] || "—";
-    els.detailNote.value = event.note || "";
-    els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
+    if (els.detailEventTitle) els.detailEventTitle.textContent = event.title || "—";
+    if (els.detailCategoryBadge) els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "عمومی";
+    if (els.detailRepeatBadge) els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "یک‌بار";
+    if (els.detailDateIso) els.detailDateIso.textContent = event.date_iso || "—";
+    if (els.detailDateJalali) els.detailDateJalali.textContent = event.date_jalali || "—";
+    if (els.detailTimezone) els.detailTimezone.textContent = event.tz_name || "UTC";
+    if (els.detailStatus) els.detailStatus.textContent = STATUS_LABELS[event.notify_status] || "—";
+    if (els.detailNote) els.detailNote.value = event.note || "";
+    if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
 
     openSheet("detailSheet", els.detailNote);
   }
@@ -461,13 +481,13 @@
     e.preventDefault();
 
     const payload = {
-      title: els.title.value.trim(),
-      date: els.date.value,
+      title: els.title?.value.trim() || "",
+      date: els.date?.value || "",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      repeat: els.repeat.value,
-      category: els.category.value,
-      note: els.note.value.trim(),
-      pinned: els.pin.checked,
+      repeat: els.repeat?.value || "none",
+      category: els.category?.value || "general",
+      note: els.note?.value.trim() || "",
+      pinned: !!els.pin?.checked,
     };
 
     if (!payload.title || !payload.date) {
@@ -493,6 +513,7 @@
       resetComposerForm();
       await loadEvents();
     } catch (error) {
+      console.error("[DEBUG] submitEventForm failed:", error);
       showToast(normalizeErrorMessage(error), "error");
     } finally {
       setLoading(false);
@@ -527,7 +548,7 @@
     try {
       const data = await apiPost("/api/note", {
         event_id: event.id,
-        note: els.detailNote.value.trim(),
+        note: els.detailNote?.value.trim() || "",
       });
 
       const target = getEventById(event.id);
@@ -544,7 +565,7 @@
 
   function resetCurrentNote() {
     const event = getEventById(state.detailEventId);
-    if (!event) return;
+    if (!event || !els.detailNote) return;
     els.detailNote.value = event.note || "";
   }
 
@@ -562,7 +583,9 @@
       });
 
       event.pinned = !!data.pinned;
-      els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
+      if (els.detailPinBtn) {
+        els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
+      }
       renderEvents();
       updateCounters();
       showToast(event.pinned ? "رویداد سنجاق شد." : "سنجاق برداشته شد.", "success");
@@ -672,19 +695,8 @@
 
     let gd = days + 1;
     const salA = [
-      0,
-      31,
-      (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28,
-      31,
-      30,
-      31,
-      30,
-      31,
-      31,
-      30,
-      31,
-      30,
-      31,
+      0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31,
+      30, 31, 31, 30, 31, 30, 31,
     ];
 
     let gm = 0;
@@ -694,11 +706,7 @@
       gd -= v;
     }
 
-    return {
-      gy,
-      gm,
-      gd,
-    };
+    return { gy, gm, gd };
   }
 
   function gregorianToJalali(gy, gm, gd) {
@@ -734,7 +742,7 @@
     }
 
     const jm = days < 186 ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
-    const jd = 1 + (days < 186 ? (days % 31) : ((days - 186) % 30));
+    const jd = 1 + (days < 186 ? days % 31 : (days - 186) % 30);
 
     return { jy, jm, jd };
   }
@@ -744,8 +752,8 @@
   }
 
   function syncJalaliFromGregorian() {
-    if (!els.date.value) {
-      els.dateJalali.value = "";
+    if (!els.date?.value) {
+      if (els.dateJalali) els.dateJalali.value = "";
       return;
     }
 
@@ -753,11 +761,13 @@
     if (!gy || !gm || !gd) return;
 
     const j = gregorianToJalali(gy, gm, gd);
-    els.dateJalali.value = `${j.jy}/${format2(j.jm)}/${format2(j.jd)}`;
+    if (els.dateJalali) {
+      els.dateJalali.value = `${j.jy}/${format2(j.jm)}/${format2(j.jd)}`;
+    }
   }
 
   function syncGregorianFromJalali() {
-    const raw = els.dateJalali.value.trim().replaceAll("-", "/");
+    const raw = els.dateJalali?.value.trim().replaceAll("-", "/") || "";
     if (!raw) return;
 
     const parts = raw.split("/");
@@ -767,26 +777,28 @@
     if (!jy || !jm || !jd) return;
 
     const g = jalaliToGregorian(jy, jm, jd);
-    els.date.value = `${g.gy}-${format2(g.gm)}-${format2(g.gd)}`;
+    if (els.date) {
+      els.date.value = `${g.gy}-${format2(g.gm)}-${format2(g.gd)}`;
+    }
   }
 
   function bindEvents() {
-    els.refreshBtn.addEventListener("click", loadEvents);
-    els.retryBtn.addEventListener("click", loadEvents);
-    els.emptyAddBtn.addEventListener("click", openCreateComposer);
-    els.openComposerBtn.addEventListener("click", openCreateComposer);
-    els.closeComposerX.addEventListener("click", closeSheets);
-    els.closeDetailX.addEventListener("click", closeSheets);
-    els.cancelBtn.addEventListener("click", closeSheets);
-    els.sheetOverlay.addEventListener("click", closeSheets);
+    els.refreshBtn?.addEventListener("click", loadEvents);
+    els.retryBtn?.addEventListener("click", loadEvents);
+    els.emptyAddBtn?.addEventListener("click", openCreateComposer);
+    els.openComposerBtn?.addEventListener("click", openCreateComposer);
+    els.closeComposerX?.addEventListener("click", closeSheets);
+    els.closeDetailX?.addEventListener("click", closeSheets);
+    els.cancelBtn?.addEventListener("click", closeSheets);
+    els.sheetOverlay?.addEventListener("click", closeSheets);
 
-    els.eventForm.addEventListener("submit", submitEventForm);
+    els.eventForm?.addEventListener("submit", submitEventForm);
 
-    els.date.addEventListener("change", syncJalaliFromGregorian);
-    els.dateJalali.addEventListener("change", syncGregorianFromJalali);
-    els.dateJalali.addEventListener("blur", syncGregorianFromJalali);
+    els.date?.addEventListener("change", syncJalaliFromGregorian);
+    els.dateJalali?.addEventListener("change", syncGregorianFromJalali);
+    els.dateJalali?.addEventListener("blur", syncGregorianFromJalali);
 
-    els.searchInput.addEventListener("input", (e) => {
+    els.searchInput?.addEventListener("input", (e) => {
       state.searchTerm = e.target.value || "";
       applyFilters();
       renderEvents();
@@ -801,12 +813,12 @@
       });
     });
 
-    els.detailEditBtn.addEventListener("click", handleDetailEdit);
-    els.detailDeleteBtn.addEventListener("click", deleteCurrentEvent);
-    els.detailPinBtn.addEventListener("click", toggleCurrentPin);
-    els.detailShareBtn.addEventListener("click", shareCurrentEvent);
-    els.detailNoteSaveBtn.addEventListener("click", saveCurrentNote);
-    els.detailNoteCancelBtn.addEventListener("click", resetCurrentNote);
+    els.detailEditBtn?.addEventListener("click", handleDetailEdit);
+    els.detailDeleteBtn?.addEventListener("click", deleteCurrentEvent);
+    els.detailPinBtn?.addEventListener("click", toggleCurrentPin);
+    els.detailShareBtn?.addEventListener("click", shareCurrentEvent);
+    els.detailNoteSaveBtn?.addEventListener("click", saveCurrentNote);
+    els.detailNoteCancelBtn?.addEventListener("click", resetCurrentNote);
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && state.activeSheet) closeSheets();
