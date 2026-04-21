@@ -81,10 +81,9 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     await events.create_index([("user_id", 1), ("category", 1)])
     await events.create_index([("notify_status", 1), ("processing_started_at", 1)])
 
-    # ─── Rate limits: TTL index — خودکار بعد از ۶۰ ثانیه پاک می‌شه ─────────
-rate_limits = get_database()["rate_limits"]
-await rate_limits.create_index("ts", expireAfterSeconds=60)
-await rate_limits.create_index([("user_id", 1), ("bucket", 1)], unique=True)
+    rate_limits = get_database()["rate_limits"]
+    await rate_limits.create_index("ts", expireAfterSeconds=60)
+    await rate_limits.create_index([("user_id", 1), ("bucket", 1)], unique=True)
 
     logger.info("MongoDB indexes ensured for app=%s", settings.app_name)
 
