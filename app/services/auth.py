@@ -153,13 +153,13 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-logger.warning(
+    logger.warning(
     "initData validation failed: bot_token_prefix=%s received_hash=%s computed_hash=%s auth_date=%s",
     (settings.bot_token[:10] + "...") if settings.bot_token else "EMPTY",
     (received_hash[:12] + "...") if received_hash else "NONE",
     (computed_hash[:12] + "...") if computed_hash else "NONE",
     parsed.get("auth_date"),
-)
+    )
     
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
     if not hmac.compare_digest(computed_hash, received_hash):
