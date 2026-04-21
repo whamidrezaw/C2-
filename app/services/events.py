@@ -124,7 +124,6 @@ async def list_events_for_user(
 
     return items, has_more
 
-
 async def add_event_for_user(
     user_id: str,
     payload: AddEventRequest,
@@ -133,6 +132,14 @@ async def add_event_for_user(
     settings = settings or get_settings()
     events_coll = get_events_collection()
     users_coll = get_users_collection()
+
+    logger.info(
+        "add_event_for_user called user_id=%s title=%s date=%s tz=%s",
+        user_id,
+        payload.title,
+        payload.date,
+        payload.timezone,
+    )
 
     count = await events_coll.count_documents({"user_id": user_id})
     if count >= settings.max_events_per_user:
@@ -154,9 +161,9 @@ async def add_event_for_user(
         upsert=True,
     )
 
-    await events_coll.insert_one(event_data)
-
-
+    result = await events_coll.insert_one(event_data)
+    logger.info("event inserted user_id=%s event_id=%s", user_id, result.inserted_id)
+    
 async def edit_event_for_user(
     user_id: str,
     payload: EditEventRequest,
