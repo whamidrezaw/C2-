@@ -18,7 +18,7 @@ os.environ["TELEGRAM_INITDATA_MAX_AGE"] = "900"
 os.environ["TELEGRAM_INITDATA_FUTURE_SKEW"] = "60"
 
 # این‌ها را فقط اگه set نشده باشن مقداردهی می‌کنیم
-os.environ.setdefault("BOT_TOKEN", "8715777794:AAGrbawumQhYMlRG2Py_mPtD8zLamRUEtSg")
+os.environ.setdefault("BOT_TOKEN", "123456:TEST_TOKEN_FOR_PYTEST_ONLY")
 os.environ.setdefault("MONGO_URI", "mongodb://127.0.0.1:27017")
 
 
