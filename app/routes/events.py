@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-
+from app.config import get_settings
 from app.schemas.common import PaginationMeta
 from app.schemas.requests import (
     AddEventRequest,
@@ -51,6 +51,18 @@ async def api_list(request: Request, payload: ListEventsRequest) -> ListEventsRe
 async def api_add(request: Request, payload: AddEventRequest) -> EventMutationResponse:
     user_id = await get_authenticated_user_id(request, payload.initData)
     await add_event_for_user(user_id, payload)
+
+    settings = get_settings()
+    try:
+        async with Bot(token=settings.bot_token) as bot:
+            await bot.send_message(
+                chat_id=user_id,
+                text=f"✅ رویداد «{payload.title}» با موفقیت ذخیره شد.",
+            )
+    except Exception:
+        # ثبت رویداد نباید به خاطر خطای پیام تأیید fail شود
+        pass
+
     return EventMutationResponse(success=True)
 
 
