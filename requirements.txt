@@ -12,7 +12,8 @@ pydantic-settings==2.7.0
 
 # ==================== DATABASE ====================
 motor==3.6.0
-pymongo[srv]>=4.9,<4.10
+pymongo>=4.9,<4.10
+dnspython>=2.7,<3
 
 # ==================== TEMPLATES ====================
 jinja2==3.1.4
