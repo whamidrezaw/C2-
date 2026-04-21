@@ -1,40 +1,36 @@
 (() => {
   const tg = window.Telegram?.WebApp || null;
 
-  // ✅ DEBUG - چک کن آیا tg موجود است
+  function fatal(message) {
+    console.error("[TM_FATAL]", message);
+    document.body.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: red;">
+        <h2>⚠️ خطا</h2>
+        <p>${message}</p>
+      </div>
+    `;
+  }
+
   console.log("[DEBUG] window.Telegram:", !!window.Telegram);
   console.log("[DEBUG] tg object:", !!tg);
-  console.log("[DEBUG] tg.initData:", tg?.initData);
-  console.log("[DEBUG] initData length:", tg?.initData?.length || 0);
 
-  // ✅ اگر tg null است، خطا دهید:
   if (!tg) {
-    console.error("❌ FATAL: Telegram WebApp not available!");
-    console.error("   Mini App must be opened from within Telegram.");
-    document.body.innerHTML = `
-      <div style="padding: 20px; text-align: center; color: red;">
-        <h2>⚠️ خطا</h2>
-        <p>این اپلیکیشن فقط از داخل تلگرام کار می‌کند.</p>
-        <p>لطفا از Telegram Mini App وارد شوید.</p>
-      </div>
-    `;
+    fatal("این اپلیکیشن فقط از داخل تلگرام کار می‌کند. لطفا از Telegram Mini App وارد شوید.");
     return;
   }
 
-  // ✅ اگر initData خالی است:
-  if (!tg.initData || tg.initData.trim().length === 0) {
-    console.error("❌ FATAL: initData is empty!");
-    document.body.innerHTML = `
-      <div style="padding: 20px; text-align: center; color: red;">
-        <h2>⚠️ خطا</h2>
-        <p>Telegram Mini App نتوانست احراز هویت کند.</p>
-        <p>Mini App را دوباره باز کنید.</p>
-      </div>
-    `;
+  try {
+    tg.ready();
+    tg.expand();
+  } catch (_) {}
+
+  const initData = (tg.initData || "").trim();
+  console.log("[DEBUG] initData length:", initData.length);
+
+  if (!initData) {
+    fatal("Telegram Mini App نتوانست احراز هویت کند. Mini App را دوباره باز کنید.");
     return;
   }
-
-  console.log("[DEBUG] ✅ Telegram WebApp ready!");
 
   const state = {
     events: [],
@@ -45,25 +41,10 @@
     detailEventId: null,
     editingEventId: null,
     lastFocusedElement: null,
-    initData: tg.initData,  // ← حالا تضمینی است
+    initData,
   };
 
-  // ... ادامه کد
-  // ... ادامه کد
-(() => {
-  const tg = window.Telegram?.WebApp || null;
-
-  const state = {
-    events: [],
-    filteredEvents: [],
-    currentFilter: "all",
-    searchTerm: "",
-    activeSheet: null,
-    detailEventId: null,
-    editingEventId: null,
-    lastFocusedElement: null,
-    initData: tg?.initData || "",
-  };
+  const els = {
 
   const els = {
     syncStatus: document.getElementById("syncStatus"),
