@@ -24,7 +24,7 @@
     tg.expand();
   } catch (_) {}
 
-  const initData = (tg.initData || "").trim();
+  const initData = tg.initData || "";
   console.log("[DEBUG] initData length:", initData.length);
 
   if (!initData) {
