@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -11,14 +11,13 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
 router = APIRouter(tags=["web"])
 
-
-@router.get("/", include_in_schema=False)
-async def root() -> RedirectResponse:
+@router.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root(request: Request):
+    if request.method == "HEAD":
+        return Response(status_code=200)
     return RedirectResponse(url="/webapp", status_code=302)
-
 
 @router.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
@@ -26,7 +25,6 @@ async def favicon() -> FileResponse:
     if favicon_path.exists():
         return FileResponse(str(favicon_path))
     raise HTTPException(status_code=404, detail="favicon_not_found")
-
 
 @router.get("/webapp", response_class=HTMLResponse, include_in_schema=False)
 async def render_webapp(request: Request):
