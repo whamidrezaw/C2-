@@ -12,7 +12,9 @@ from urllib.parse import parse_qsl
 from fastapi import HTTPException, Request
 
 from app.config import Settings, get_settings
-
+from datetime import datetime, timedelta, timezone
+from fastapi import HTTPException, Request
+from pymongo import ReturnDocument
 logger = logging.getLogger("tm_pro.auth")
 
 # ─── Fallback in-memory store (فقط برای تست یا وقتی DB در دسترس نیست) ──────
@@ -43,37 +45,31 @@ def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
 
 
 async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
-    """
-    Rate limit مبتنی بر MongoDB.
-    بین تمام worker های Gunicorn مشترک است.
-    از TTL index استفاده می‌کنه — خودش هر ۶۰ ثانیه پاک می‌شه.
-    """
     try:
         from app.db import get_database
+
         db = get_database()
         rate_coll = db["rate_limits"]
 
-        window_seconds = 60
         now = datetime.now(timezone.utc)
-        window_start = now - timedelta(seconds=window_seconds)
+        bucket = now.replace(second=0, microsecond=0)
 
-        # حذف رکوردهای قدیمی این کاربر در پنجره زمانی
-        await rate_coll.delete_many({"user_id": user_id, "ts": {"$lt": window_start}})
+        doc = await rate_coll.find_one_and_update(
+            {"user_id": user_id, "bucket": bucket},
+            {
+                "$inc": {"count": 1},
+                "$setOnInsert": {"ts": now},
+            },
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
 
-        # شمارش تعداد درخواست‌های باقی‌مانده
-        count = await rate_coll.count_documents({"user_id": user_id})
-
-        if count >= settings.rate_limit_count:
-            logger.warning("Rate limit exceeded (mongo): user_id=%s", user_id)
+        if int(doc.get("count", 0)) > settings.rate_limit_count:
             raise HTTPException(status_code=429, detail="RATE_LIMIT")
-
-        # ثبت درخواست جدید
-        await rate_coll.insert_one({"user_id": user_id, "ts": now})
 
     except HTTPException:
         raise
     except Exception as exc:
-        # اگه DB در دسترس نبود، به fallback memory برمی‌گردیم
         logger.warning("Rate limit mongo unavailable, using memory fallback: %s", exc)
         _check_rate_limit_memory(user_id, settings)
 
