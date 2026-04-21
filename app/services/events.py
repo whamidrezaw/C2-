@@ -16,7 +16,7 @@ from app.schemas.requests import (
 from app.schemas.responses import EventOut
 from app.utils.dates import expire_for_repeat, safe_zoneinfo, to_jalali, build_event_datetimes
 from app.utils.ids import safe_object_id
-
+import logging
 PAGE_SIZE = 50
 
 VALID_REPEATS = {"none", "daily", "weekly", "monthly", "yearly"}
