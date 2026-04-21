@@ -153,18 +153,17 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    logger.warning(
-    "initData validation failed: bot_token_prefix=%s received_hash=%s computed_hash=%s auth_date=%s",
-    (settings.bot_token[:10] + "...") if settings.bot_token else "EMPTY",
-    (received_hash[:12] + "...") if received_hash else "NONE",
-    (computed_hash[:12] + "...") if computed_hash else "NONE",
-    parsed.get("auth_date"),
-    )
-    
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
+
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
-        logger.warning("Bad Telegram initData HMAC: ip=%s", client_ip)
+        logger.warning(
+            "Bad Telegram initData HMAC: ip=%s received=%s computed=%s auth_date=%s",
+            client_ip,
+            received_hash[:12] + "...",
+            computed_hash[:12] + "...",
+            parsed.get("auth_date"),
+        )
         raise HTTPException(status_code=403, detail="BAD_HASH")
 
     validate_auth_date(
@@ -183,7 +182,6 @@ async def validate_init_data(
     if not user_id or not user_id.isdigit():
         raise HTTPException(status_code=403, detail="INVALID_ID")
 
-    # Rate limit مبتنی بر MongoDB (مشترک بین همه worker ها)
     await check_rate_limit_mongo(user_id, settings)
 
     return {
