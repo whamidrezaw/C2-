@@ -1,5 +1,4 @@
-(() => {
-  const tg = window.Telegram?.WebApp || null;
+
 
   function fatal(message) {
     console.error("[TM_FATAL]", message);
@@ -32,17 +31,7 @@
     return;
   }
 
-  const state = {
-    events: [],
-    filteredEvents: [],
-    currentFilter: "all",
-    searchTerm: "",
-    activeSheet: null,
-    detailEventId: null,
-    editingEventId: null,
-    lastFocusedElement: null,
-    initData,
-  };
+
 
   const els = {
 
