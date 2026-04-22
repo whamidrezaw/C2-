@@ -349,7 +349,9 @@ function getUrgencyLabel(dateIso) {
 
     state.filteredEvents.forEach((event) => {
       const article = document.createElement("article");
-      article.className = "event-card";
+      const tone = getUrgencyTone(event.dateiso);
+      const urgencyLabel = getUrgencyLabel(event.dateiso);
+      article.className = `event-card tone-${tone}`;
       article.tabIndex = 0;
       article.setAttribute("role", "button");
       article.setAttribute("aria-label", `Show details for ${event.title}`);
