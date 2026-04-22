@@ -80,7 +80,7 @@ def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {
         key: value
         for key, value in parsed.items()
-        if key not in {"hash", "signature"}
+        if key != "hash"
     }
     return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
 
