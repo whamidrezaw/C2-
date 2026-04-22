@@ -299,6 +299,61 @@ svg {
   transform: scale(0.995);
 }
 
+.event-card {
+  position: relative;
+  overflow: hidden;
+  border-inline-start-width: 6px;
+}
+
+.event-card.tone-past {
+  border-inline-start-color: #b42318;
+  background:
+    linear-gradient(180deg, rgba(180, 35, 24, 0.08), rgba(180, 35, 24, 0.02)),
+    var(--tg-surface);
+}
+
+.event-card.tone-critical {
+  border-inline-start-color: #e5484d;
+  background:
+    linear-gradient(180deg, rgba(229, 72, 77, 0.10), rgba(229, 72, 77, 0.03)),
+    var(--tg-surface);
+}
+
+.event-card.tone-soon {
+  border-inline-start-color: #f08c00;
+  background:
+    linear-gradient(180deg, rgba(240, 140, 0, 0.10), rgba(240, 140, 0, 0.03)),
+    var(--tg-surface);
+}
+
+.event-card.tone-warm {
+  border-inline-start-color: #d4a106;
+  background:
+    linear-gradient(180deg, rgba(212, 161, 6, 0.10), rgba(212, 161, 6, 0.03)),
+    var(--tg-surface);
+}
+
+.event-card.tone-cool {
+  border-inline-start-color: #2898ec;
+  background:
+    linear-gradient(180deg, rgba(40, 152, 236, 0.10), rgba(40, 152, 236, 0.03)),
+    var(--tg-surface);
+}
+
+.event-card.tone-future {
+  border-inline-start-color: #7c66dc;
+  background:
+    linear-gradient(180deg, rgba(124, 102, 220, 0.10), rgba(124, 102, 220, 0.03)),
+    var(--tg-surface);
+}
+
+.event-card.tone-long {
+  border-inline-start-color: #2f9e5b;
+  background:
+    linear-gradient(180deg, rgba(47, 158, 91, 0.10), rgba(47, 158, 91, 0.03)),
+    var(--tg-surface);
+}
+
 .event-card-top {
   display: flex;
   align-items: start;
@@ -341,7 +396,45 @@ svg {
 .badge-muted {
   background: color-mix(in srgb, var(--tg-text) 5%, var(--tg-surface));
 }
+.mini-badge-urgency {
+  font-weight: 700;
+  border-color: transparent;
+}
 
+.mini-badge-urgency.tone-past {
+  color: #fff1f1;
+  background: rgba(180, 35, 24, 0.88);
+}
+
+.mini-badge-urgency.tone-critical {
+  color: #fff4f4;
+  background: rgba(229, 72, 77, 0.86);
+}
+
+.mini-badge-urgency.tone-soon {
+  color: #fff7ed;
+  background: rgba(240, 140, 0, 0.84);
+}
+
+.mini-badge-urgency.tone-warm {
+  color: #fff8db;
+  background: rgba(212, 161, 6, 0.82);
+}
+
+.mini-badge-urgency.tone-cool {
+  color: #eef7ff;
+  background: rgba(40, 152, 236, 0.82);
+}
+
+.mini-badge-urgency.tone-future {
+  color: #f3efff;
+  background: rgba(124, 102, 220, 0.82);
+}
+
+.mini-badge-urgency.tone-long {
+  color: #effcf3;
+  background: rgba(47, 158, 91, 0.84);
+}
 .event-repeat {
   color: var(--tg-muted);
   font-size: 0.86rem;
