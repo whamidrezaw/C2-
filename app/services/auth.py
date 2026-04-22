@@ -12,9 +12,9 @@ from urllib.parse import parse_qsl
 from fastapi import HTTPException, Request
 
 from app.config import Settings, get_settings
-from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request
-from pymongo import ReturnDocument
+#from datetime import datetime, timedelta, timezone
+#from fastapi import HTTPException, Request
+#from pymongo import ReturnDocument
 logger = logging.getLogger("tm_pro.auth")
 
 # ─── Fallback in-memory store (فقط برای تست یا وقتی DB در دسترس نیست) ──────
@@ -153,8 +153,8 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    logger.warning("PARSED keys=%s", sorted(parsed.keys()))
-    logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
+   # logger.warning("PARSED keys=%s", sorted(parsed.keys()))
+   # logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
 
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
