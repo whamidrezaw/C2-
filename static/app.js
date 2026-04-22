@@ -298,7 +298,42 @@
       return matchesFilter && matchesSearch;
     });
   }
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
 
+function getDaysUntil(dateIso) {
+  const today = startOfLocalDay(new Date());
+  const target = startOfLocalDay(new Date(`${dateIso}T00:00:00`));
+  const diffMs = target.getTime() - today.getTime();
+  return Math.ceil(diffMs / 86400000);
+}
+
+function getUrgencyTone(dateIso) {
+  const days = getDaysUntil(dateIso);
+
+  if (days < 0) return "past";
+  if (days <= 7) return "critical";
+  if (days <= 30) return "soon";
+  if (days <= 90) return "warm";
+  if (days <= 180) return "cool";
+  if (days <= 365) return "future";
+  return "long";
+}
+
+function getUrgencyLabel(dateIso) {
+  const days = getDaysUntil(dateIso);
+
+  if (days < 0) return "گذشته";
+  if (days === 0) return "امروز";
+  if (days === 1) return "فردا";
+  if (days <= 7) return `${days} روز مانده`;
+  if (days <= 30) return "کمتر از ۱ ماه";
+  if (days <= 90) return "کمتر از ۳ ماه";
+  if (days <= 180) return "کمتر از ۶ ماه";
+  if (days <= 365) return "کمتر از ۱ سال";
+  return "بیشتر از ۱ سال";
+}
   function renderEvents() {
     if (!els.eventsWrap) return;
 
