@@ -1,23 +1,21 @@
 from __future__ import annotations
-from pymongo import ReturnDocument
+
 import hashlib
 import hmac
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import HTTPException, Request
+from pymongo import ReturnDocument
 
 from app.config import Settings, get_settings
-from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request
-from pymongo import ReturnDocument
+
 logger = logging.getLogger("tm_pro.auth")
 
-# ─── Fallback in-memory store (فقط برای تست یا وقتی DB در دسترس نیست) ──────
+# Fallback in-memory store, only for tests or when DB is unavailable.
 _rate_store: dict[str, list[float]] = {}
 
 
@@ -29,7 +27,7 @@ def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
 
 
 def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
-    """Fallback in-memory rate limit — فقط وقتی DB در دسترس نیست."""
+    """Fallback in-memory rate limit, only when DB is unavailable."""
     history = _prune_rate_history(user_id)
     if len(history) >= settings.rate_limit_count:
         logger.warning("Rate limit exceeded (memory): user_id=%s", user_id)
@@ -39,7 +37,7 @@ def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
 
 
 def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
-    """نسخه sync — فقط برای تست‌ها استفاده می‌شه."""
+    """Synchronous version, used only in tests."""
     settings = settings or get_settings()
     _check_rate_limit_memory(user_id, settings)
 
@@ -73,8 +71,6 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
         logger.warning("Rate limit mongo unavailable, using memory fallback: %s", exc)
         _check_rate_limit_memory(user_id, settings)
 
-
-# ─── توابع اصلی ─────────────────────────────────────────────────────────────
 
 def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {
@@ -153,18 +149,13 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    logger.warning("PARSED keys=%s", sorted(parsed.keys()))
-    logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
-
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
         logger.warning(
-            "Bad Telegram initData HMAC: ip=%s received=%s computed=%s auth_date=%s",
+            "Bad Telegram initData HMAC: ip=%s auth_date=%s",
             client_ip,
-            received_hash[:12] + "...",
-            computed_hash[:12] + "...",
             parsed.get("auth_date"),
         )
         raise HTTPException(status_code=403, detail="BAD_HASH")
@@ -191,7 +182,6 @@ async def validate_init_data(
         "user_id": user_id,
         "user": user_data,
         "auth_date": parsed.get("auth_date"),
-        "raw": parsed,
     }
 
 
