@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+import logging
+from telegram import Bot
 from fastapi import APIRouter, Request
 from app.config import get_settings
 from app.schemas.common import PaginationMeta
@@ -28,10 +29,12 @@ from app.services.events import (
 )
 
 router = APIRouter(prefix="/api", tags=["events"])
-
+logger = logging.getLogger("tm_pro.events")
 
 @router.post("/list", response_model=ListEventsResponse)
 async def api_list(request: Request, payload: ListEventsRequest) -> ListEventsResponse:
+    logger.warning("payload.initData repr=%r", payload.initData)
+    logger.warning("payload.initData len=%s", len(payload.initData or ""))
     user_id = await get_authenticated_user_id(request, payload.initData)
     targets, has_more = await list_events_for_user(user_id, payload)
 
