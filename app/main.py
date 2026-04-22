@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from telegram import Bot
+
 from app.config import get_settings
 from app.db import close_mongo_connection, connect_to_mongo, ensure_indexes
 from app.routes.events import router as events_router
@@ -15,10 +16,16 @@ from app.routes.web import router as web_router
 
 settings = get_settings()
 
+root_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+
 logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    level=root_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+if settings.app_env.lower() == "production":
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 logger = logging.getLogger("tm_pro.app")
 
