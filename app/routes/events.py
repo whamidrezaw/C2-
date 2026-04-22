@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import logging
-from telegram import Bot
+
 from fastapi import APIRouter, Request
+from telegram import Bot
+
 from app.config import get_settings
 from app.schemas.common import PaginationMeta
 from app.schemas.requests import (
@@ -31,10 +34,9 @@ from app.services.events import (
 router = APIRouter(prefix="/api", tags=["events"])
 logger = logging.getLogger("tm_pro.events")
 
+
 @router.post("/list", response_model=ListEventsResponse)
 async def api_list(request: Request, payload: ListEventsRequest) -> ListEventsResponse:
-    logger.warning("payload.initData repr=%r", payload.initData)
-    logger.warning("payload.initData len=%s", len(payload.initData or ""))
     user_id = await get_authenticated_user_id(request, payload.initData)
     targets, has_more = await list_events_for_user(user_id, payload)
 
@@ -60,11 +62,10 @@ async def api_add(request: Request, payload: AddEventRequest) -> EventMutationRe
         async with Bot(token=settings.bot_token) as bot:
             await bot.send_message(
                 chat_id=user_id,
-                text=f"✅ رویداد «{payload.title}» با موفقیت ذخیره شد.",
+                text=f'✅ Event "{payload.title}" was saved successfully.',
             )
-    except Exception:
-        # ثبت رویداد نباید به خاطر خطای پیام تأیید fail شود
-        pass
+    except Exception as exc:
+        logger.warning("Confirmation message failed: user_id=%s error=%s", user_id, exc)
 
     return EventMutationResponse(success=True)
 
