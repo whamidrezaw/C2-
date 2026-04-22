@@ -361,12 +361,10 @@ function getUrgencyLabel(dateIso) {
           <div class="event-head">
             <h3 class="event-title">${escapeHtml(event.title)}</h3>
             <div class="event-badges">
-              ${event.pinned ? `<span class="mini-badge">📌</span>` : ""}
-              <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "General")}</span>
-            </div>
-          </div>
-          <span class="event-repeat">${escapeHtml(REPEAT_LABELS[event.repeat] || "One time")}</span>
-        </div>
+            ${event.pinned ? '<span class="mini-badge">📌 سنجاق‌شده</span>' : ""}
+            <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category])}</span>
+           <span class="mini-badge mini-badge-urgency tone-${tone}">${escapeHtml(urgencyLabel)}</span>
+           </div>
 
         <div class="event-dates">
           <span>${escapeHtml(event.date_iso)}</span>
