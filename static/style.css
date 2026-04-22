@@ -44,12 +44,14 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  direction: ltr;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--tg-primary) 10%, transparent), transparent 42%),
     var(--tg-bg);
   color: var(--tg-text);
   line-height: 1.55;
+  text-align: start;
 }
 
 button,
@@ -57,6 +59,12 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input,
+select,
+textarea {
+  text-align: start;
 }
 
 button {
@@ -139,6 +147,7 @@ svg {
 .brand-copy {
   display: flex;
   flex-direction: column;
+  text-align: start;
 }
 
 .brand-title {
@@ -171,10 +180,18 @@ svg {
   display: grid;
   gap: 20px;
   padding: 22px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tg-surface) 98%, transparent), color-mix(in srgb, var(--tg-primary) 5%, var(--tg-surface)));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tg-surface) 98%, transparent),
+    color-mix(in srgb, var(--tg-primary) 5%, var(--tg-surface))
+  );
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.hero-copy {
+  text-align: start;
 }
 
 .hero-title {
@@ -200,6 +217,7 @@ svg {
   background: color-mix(in srgb, var(--tg-surface) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: 16px;
+  text-align: start;
 }
 
 .meta-pill-label {
@@ -258,6 +276,7 @@ svg {
   outline: none;
   background: transparent;
   color: var(--tg-text);
+  text-align: start;
 }
 
 .events-wrap {
@@ -273,6 +292,7 @@ svg {
   background: var(--tg-surface);
   box-shadow: var(--shadow-sm);
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  text-align: start;
 }
 
 .event-card:active {
@@ -474,6 +494,7 @@ svg {
 .field-group {
   display: grid;
   gap: 8px;
+  text-align: start;
 }
 
 .field-label {
@@ -516,6 +537,7 @@ svg {
   border: 1px solid var(--border);
   border-radius: 16px;
   background: color-mix(in srgb, var(--tg-bg) 22%, var(--tg-surface));
+  text-align: start;
 }
 
 .form-actions,
@@ -573,6 +595,7 @@ svg {
   border: 1px solid var(--border);
   border-radius: 16px;
   background: color-mix(in srgb, var(--tg-bg) 25%, var(--tg-surface));
+  text-align: start;
 }
 
 .detail-meta-label {
