@@ -41,10 +41,7 @@ class Settings(BaseSettings):
     reminder_poll_interval_secs: int = Field(default=30, alias="REMINDER_POLL_INTERVAL_SECS")
     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
 
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="INFO",
-        alias="LOG_LEVEL",
-    )
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     @computed_field
     @property
@@ -83,18 +80,8 @@ class Settings(BaseSettings):
         if not (0 <= self.default_reminder_hour <= 23):
             raise ValueError("DEFAULT_REMINDER_HOUR must be between 0 and 23")
 
-        if self.telegram_initdata_max_age < 1:
-            raise ValueError("TELEGRAM_INITDATA_MAX_AGE must be >= 1")
-
         if self.telegram_initdata_future_skew < 0:
             raise ValueError("TELEGRAM_INITDATA_FUTURE_SKEW must be >= 0")
-
-        if self.app_env == "production":
-            if self.app_debug:
-                raise ValueError("APP_DEBUG must be false in production")
-
-            if "127.0.0.1" in self.webapp_base_url or "localhost" in self.webapp_base_url:
-                raise ValueError("WEBAPP_BASE_URL must not point to localhost in production")
 
 
 @lru_cache
