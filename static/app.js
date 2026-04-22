@@ -5,7 +5,7 @@
     console.error("[TM_FATAL]", message);
     document.body.innerHTML = `
       <div style="padding: 20px; text-align: center; color: red;">
-        <h2>⚠️ خطا</h2>
+        <h2>⚠️ Error</h2>
         <p>${message}</p>
       </div>
     `;
@@ -15,7 +15,7 @@
   console.log("[DEBUG] tg object:", !!tg);
 
   if (!tg) {
-    fatal("این اپلیکیشن فقط از داخل تلگرام کار می‌کند. لطفا از Telegram Mini App وارد شوید.");
+    fatal("This application only works inside Telegram. Please open it from Telegram Mini App.");
     return;
   }
 
@@ -28,7 +28,7 @@
   console.log("[DEBUG] initData length:", initData.length);
 
   if (!initData) {
-    fatal("Telegram Mini App نتوانست احراز هویت کند. Mini App را دوباره باز کنید.");
+    fatal("Telegram Mini App could not authenticate. Please reopen the Mini App.");
     return;
   }
 
@@ -97,30 +97,30 @@
   };
 
   const CATEGORY_LABELS = {
-    general: "عمومی",
-    birthday: "تولد",
-    work: "کار",
-    family: "خانواده",
-    health: "سلامت",
-    travel: "سفر",
-    finance: "مالی",
-    study: "مطالعه",
-    other: "سایر",
+    general: "General",
+    birthday: "Birthday",
+    work: "Work",
+    family: "Family",
+    health: "Health",
+    travel: "Travel",
+    finance: "Finance",
+    study: "Study",
+    other: "Other",
   };
 
   const REPEAT_LABELS = {
-    none: "یک‌بار",
-    daily: "روزانه",
-    weekly: "هفتگی",
-    monthly: "ماهانه",
-    yearly: "سالانه",
+    none: "One time",
+    daily: "Daily",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    yearly: "Yearly",
   };
 
   const STATUS_LABELS = {
-    pending: "در انتظار",
-    processing: "در حال پردازش",
-    done: "ارسال شده",
-    failed: "ناموفق",
+    pending: "Pending",
+    processing: "Processing",
+    done: "Sent",
+    failed: "Failed",
   };
 
   function initTelegram() {
@@ -157,7 +157,7 @@
 
   function setLoading(loading) {
     document.body.classList.toggle("is-loading", loading);
-    setSyncStatus(loading ? "در حال همگام‌سازی" : "آماده");
+    setSyncStatus(loading ? "Syncing" : "Ready");
   }
 
   function showToast(message, type = "info") {
@@ -207,23 +207,23 @@
   function normalizeErrorMessage(error) {
     const detail = error?.message || "";
     const map = {
-      NO_DATA: "اطلاعات احراز هویت تلگرام وجود ندارد.",
-      BAD_HASH: "اعتبار درخواست تلگرام نامعتبر است.",
-      EXPIRED: "نشست Mini App منقضی شده است. صفحه را دوباره باز کن.",
-      INVALID_DATE: "تاریخ واردشده معتبر نیست.",
-      TITLE_TOO_LONG: "عنوان بیش از حد طولانی است.",
-      NOTE_TOO_LONG: "یادداشت بیش از حد طولانی است.",
-      EVENT_LIMIT_REACHED: "به سقف تعداد رویدادها رسیده‌ای.",
-      RATE_LIMIT: "تعداد درخواست‌ها زیاد است. چند لحظه بعد دوباره تلاش کن.",
-      NOT_FOUND_OR_UNAUTHORIZED: "این رویداد پیدا نشد یا دسترسی آن را نداری.",
-      REQUEST_FAILED: "درخواست انجام نشد.",
-      NO_HASH: "داده احراز هویت تلگرام ناقص است.",
-      NO_USER: "اطلاعات کاربر از تلگرام دریافت نشد.",
-      INVALID_AUTH_DATE: "زمان احراز هویت معتبر نیست.",
-      INVALID_INIT_DATA: "داده دریافتی از تلگرام معتبر نیست.",
-      MISCONFIGURED: "تنظیمات سرور کامل نیست.",
+      NO_DATA: "Telegram authentication data is missing.",
+      BAD_HASH: "The Telegram request is invalid.",
+      EXPIRED: "The Mini App session has expired. Please reopen the page.",
+      INVALID_DATE: "The entered date is invalid.",
+      TITLE_TOO_LONG: "The title is too long.",
+      NOTE_TOO_LONG: "The note is too long.",
+      EVENT_LIMIT_REACHED: "You have reached the event limit.",
+      RATE_LIMIT: "Too many requests. Please try again in a moment.",
+      NOT_FOUND_OR_UNAUTHORIZED: "This event was not found or you do not have access to it.",
+      REQUEST_FAILED: "The request failed.",
+      NO_HASH: "Telegram authentication data is incomplete.",
+      NO_USER: "User information was not received from Telegram.",
+      INVALID_AUTH_DATE: "The authentication time is invalid.",
+      INVALID_INIT_DATA: "The data received from Telegram is invalid.",
+      MISCONFIGURED: "The server configuration is incomplete.",
     };
-    return map[detail] || `خطایی رخ داد: ${detail || "UNKNOWN"}`;
+    return map[detail] || `An error occurred: ${detail || "UNKNOWN"}`;
   }
 
   async function loadEvents() {
@@ -245,7 +245,7 @@
       if (els.listState) els.listState.hidden = true;
       if (els.listErrorState) els.listErrorState.hidden = false;
       showToast(normalizeErrorMessage(error), "error");
-      setSyncStatus("خطا");
+      setSyncStatus("Error");
     } finally {
       setLoading(false);
     }
@@ -268,15 +268,15 @@
       els.listState.hidden = false;
       const title = els.listState.querySelector(".empty-state-title");
       const text = els.listState.querySelector(".empty-state-text");
-      if (title) title.textContent = "هنوز رویدادی ثبت نشده";
-      if (text) text.textContent = "اولین رویداد را اضافه کن تا یادآوری‌هایت را مستقیم در تلگرام دریافت کنی.";
+      if (title) title.textContent = "No events yet";
+      if (text) text.textContent = "Add your first event to receive reminders directly in Telegram.";
       if (els.emptyAddBtn) els.emptyAddBtn.hidden = false;
     } else if (hasEvents && !hasFiltered) {
       els.listState.hidden = false;
       const title = els.listState.querySelector(".empty-state-title");
       const text = els.listState.querySelector(".empty-state-text");
-      if (title) title.textContent = "نتیجه‌ای پیدا نشد";
-      if (text) text.textContent = "فیلتر یا جستجو را تغییر بده.";
+      if (title) title.textContent = "No results found";
+      if (text) text.textContent = "Change the filter or search term.";
       if (els.emptyAddBtn) els.emptyAddBtn.hidden = true;
     }
   }
@@ -317,7 +317,7 @@
       article.className = "event-card";
       article.tabIndex = 0;
       article.setAttribute("role", "button");
-      article.setAttribute("aria-label", `نمایش جزئیات ${event.title}`);
+      article.setAttribute("aria-label", `Show details for ${event.title}`);
 
       article.innerHTML = `
         <div class="event-card-top">
@@ -325,10 +325,10 @@
             <h3 class="event-title">${escapeHtml(event.title)}</h3>
             <div class="event-badges">
               ${event.pinned ? `<span class="mini-badge">📌</span>` : ""}
-              <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "عمومی")}</span>
+              <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "General")}</span>
             </div>
           </div>
-          <span class="event-repeat">${escapeHtml(REPEAT_LABELS[event.repeat] || "یک‌بار")}</span>
+          <span class="event-repeat">${escapeHtml(REPEAT_LABELS[event.repeat] || "One time")}</span>
         </div>
 
         <div class="event-dates">
@@ -339,7 +339,7 @@
 
         <div class="event-bottom">
           <span class="status-dot status-${escapeHtml(event.notify_status)}"></span>
-          <span class="event-status">${escapeHtml(STATUS_LABELS[event.notify_status] || "نامشخص")}</span>
+          <span class="event-status">${escapeHtml(STATUS_LABELS[event.notify_status] || "Unknown")}</span>
         </div>
       `;
 
@@ -428,9 +428,9 @@
     if (els.pin) els.pin.checked = false;
     if (els.dateJalali) els.dateJalali.value = "";
     state.editingEventId = null;
-    if (els.composerTitle) els.composerTitle.textContent = "رویداد جدید";
-    if (els.composerSubtitle) els.composerSubtitle.textContent = "عنوان، تاریخ و نوع تکرار را مشخص کن.";
-    if (els.saveEventBtn) els.saveEventBtn.textContent = "ذخیره رویداد";
+    if (els.composerTitle) els.composerTitle.textContent = "New event";
+    if (els.composerSubtitle) els.composerSubtitle.textContent = "Set the title, date, and repeat pattern.";
+    if (els.saveEventBtn) els.saveEventBtn.textContent = "Save event";
   }
 
   function openCreateComposer() {
@@ -448,9 +448,9 @@
     if (els.category) els.category.value = event.category || "general";
     if (els.pin) els.pin.checked = !!event.pinned;
     if (els.note) els.note.value = event.note || "";
-    if (els.composerTitle) els.composerTitle.textContent = "ویرایش رویداد";
-    if (els.composerSubtitle) els.composerSubtitle.textContent = "اطلاعات رویداد را به‌روزرسانی کن.";
-    if (els.saveEventBtn) els.saveEventBtn.textContent = "ذخیره تغییرات";
+    if (els.composerTitle) els.composerTitle.textContent = "Edit event";
+    if (els.composerSubtitle) els.composerSubtitle.textContent = "Update the event information.";
+    if (els.saveEventBtn) els.saveEventBtn.textContent = "Save changes";
     openSheet("composerSheet", els.title);
   }
 
@@ -465,14 +465,14 @@
     state.detailEventId = eventId;
 
     if (els.detailEventTitle) els.detailEventTitle.textContent = event.title || "—";
-    if (els.detailCategoryBadge) els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "عمومی";
-    if (els.detailRepeatBadge) els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "یک‌بار";
+    if (els.detailCategoryBadge) els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "General";
+    if (els.detailRepeatBadge) els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "One time";
     if (els.detailDateIso) els.detailDateIso.textContent = event.date_iso || "—";
     if (els.detailDateJalali) els.detailDateJalali.textContent = event.date_jalali || "—";
     if (els.detailTimezone) els.detailTimezone.textContent = event.tz_name || "UTC";
     if (els.detailStatus) els.detailStatus.textContent = STATUS_LABELS[event.notify_status] || "—";
     if (els.detailNote) els.detailNote.value = event.note || "";
-    if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
+    if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
 
     openSheet("detailSheet", els.detailNote);
   }
@@ -491,7 +491,7 @@
     };
 
     if (!payload.title || !payload.date) {
-      showToast("عنوان و تاریخ الزامی هستند.", "error");
+      showToast("Title and date are required.", "error");
       return;
     }
 
@@ -503,10 +503,10 @@
           event_id: state.editingEventId,
           ...payload,
         });
-        showToast("رویداد به‌روزرسانی شد.", "success");
+        showToast("Event updated.", "success");
       } else {
         await apiPost("/api/add", payload);
-        showToast("رویداد با موفقیت ثبت شد.", "success");
+        showToast("Event saved successfully.", "success");
       }
 
       closeSheets();
@@ -524,14 +524,14 @@
     const event = getEventById(state.detailEventId);
     if (!event) return;
 
-    const ok = window.confirm(`رویداد «${event.title}» حذف شود؟`);
+    const ok = window.confirm(`Delete event "${event.title}"?`);
     if (!ok) return;
 
     setLoading(true);
     try {
       await apiPost("/api/delete", { event_id: event.id });
       closeSheets();
-      showToast("رویداد حذف شد.", "success");
+      showToast("Event deleted.", "success");
       await loadEvents();
     } catch (error) {
       showToast(normalizeErrorMessage(error), "error");
@@ -554,7 +554,7 @@
       const target = getEventById(event.id);
       if (target) target.note = data.note || "";
 
-      showToast("یادداشت ذخیره شد.", "success");
+      showToast("Note saved.", "success");
       renderEvents();
     } catch (error) {
       showToast(normalizeErrorMessage(error), "error");
@@ -584,11 +584,11 @@
 
       event.pinned = !!data.pinned;
       if (els.detailPinBtn) {
-        els.detailPinBtn.textContent = event.pinned ? "برداشتن سنجاق" : "سنجاق";
+        els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
       }
       renderEvents();
       updateCounters();
-      showToast(event.pinned ? "رویداد سنجاق شد." : "سنجاق برداشته شد.", "success");
+      showToast(event.pinned ? "Event pinned." : "Event unpinned.", "success");
     } catch (error) {
       showToast(normalizeErrorMessage(error), "error");
     } finally {
@@ -604,7 +604,7 @@
       `📅 ${event.title}`,
       `Gregorian: ${event.date_iso}`,
       `Jalali: ${event.date_jalali}`,
-      `Repeat: ${REPEAT_LABELS[event.repeat] || "One-time"}`,
+      `Repeat: ${REPEAT_LABELS[event.repeat] || "One time"}`,
       event.note ? `Note: ${event.note}` : "",
     ]
       .filter(Boolean)
@@ -616,14 +616,14 @@
           title: event.title,
           text,
         });
-        showToast("اشتراک‌گذاری انجام شد.", "success");
+        showToast("Shared successfully.", "success");
         return;
       }
 
       await copyToClipboard(text);
-      showToast("متن رویداد کپی شد.", "success");
+      showToast("Event text copied.", "success");
     } catch (_) {
-      showToast("اشتراک‌گذاری انجام نشد.", "error");
+      showToast("Sharing failed.", "error");
     }
   }
 
