@@ -435,6 +435,26 @@ svg {
   color: #effcf3;
   background: rgba(47, 158, 91, 0.84);
 }
+
+.mini-badge-urgency {
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.event-countdown {
+  margin-top: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.detail-countdown {
+  display: block;
+  font-size: 0.98rem;
+  line-height: 1.7;
+  font-weight: 700;
+}
+
 .event-repeat {
   color: var(--tg-muted);
   font-size: 0.86rem;
