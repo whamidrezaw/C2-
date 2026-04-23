@@ -425,7 +425,8 @@ function getCountdownData(dateIso) {
       const article = document.createElement("article");
       const tone = getUrgencyTone(event.dateiso);
       const urgencyLabel = getUrgencyLabel(event.dateiso);
-      article.className = `event-card tone-${tone}`;
+      const countdown = getCountdownData(event.dateiso);
+      article.className = `event-card tone-${countdown.tone}`;
       article.tabIndex = 0;
       article.setAttribute("role", "button");
       article.setAttribute("aria-label", `Show details for ${event.title}`);
@@ -435,16 +436,20 @@ function getCountdownData(dateIso) {
           <div class="event-head">
             <h3 class="event-title">${escapeHtml(event.title)}</h3>
             <div class="event-badges">
-            ${event.pinned ? '<span class="mini-badge">📌 سنجاق‌شده</span>' : ""}
-            <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category])}</span>
-           <span class="mini-badge mini-badge-urgency tone-${tone}">${escapeHtml(urgencyLabel)}</span>
-           </div>
+  ${event.pinned ? '<span class="mini-badge">📌 سنجاق‌شده</span>' : ""}
+  <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "General")}</span>
+  <span class="mini-badge mini-badge-urgency tone-${countdown.tone}">${escapeHtml(countdown.shortText)}</span>
+</div>
 
-        <div class="event-dates">
-          <span>${escapeHtml(event.date_iso)}</span>
-          <span>•</span>
-          <span>${escapeHtml(event.date_jalali)}</span>
-        </div>
+<div class="event-dates">
+  <span>${escapeHtml(event.dateiso)}</span>
+  <span>•</span>
+  <span>${escapeHtml(event.datejalali)}</span>
+</div>
+
+<div class="event-countdown tone-${countdown.tone}">
+  ${escapeHtml(countdown.fullText)}
+</div>
 
         <div class="event-bottom">
           <span class="status-dot status-${escapeHtml(event.notify_status)}"></span>
