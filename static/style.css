@@ -312,6 +312,13 @@ svg {
     var(--tg-surface);
 }
 
+.event-card.tone-today {
+  border-inline-start-color: #c2255c;
+  background:
+    linear-gradient(180deg, rgba(194, 37, 92, 0.10), rgba(194, 37, 92, 0.03)),
+    var(--tg-surface);
+}
+
 .event-card.tone-critical {
   border-inline-start-color: #e5484d;
   background:
