@@ -413,6 +413,11 @@ svg {
   background: rgba(180, 35, 24, 0.88);
 }
 
+.mini-badge-urgency.tone-today {
+  color: #fff1f7;
+  background: rgba(194, 37, 92, 0.86);
+}
+
 .mini-badge-urgency.tone-critical {
   color: #fff4f4;
   background: rgba(229, 72, 77, 0.86);
