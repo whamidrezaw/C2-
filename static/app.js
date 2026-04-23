@@ -594,6 +594,11 @@ function getCountdownData(dateIso) {
     if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
 
     openSheet("detailSheet", els.detailNote);
+    const countdown = getCountdownData(event.dateiso);
+if (els.detailCountdown) {
+  els.detailCountdown.textContent = countdown.fullText;
+  els.detailCountdown.className = `detail-countdown tone-${countdown.tone}`;
+}
   }
 
   async function submitEventForm(e) {
