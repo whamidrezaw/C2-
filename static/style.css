@@ -469,6 +469,46 @@ svg {
   font-weight: 700;
 }
 
+.event-countdown.tone-past,
+.detail-countdown.tone-past {
+  color: #b42318;
+}
+
+.event-countdown.tone-today,
+.detail-countdown.tone-today {
+  color: #c2255c;
+}
+
+.event-countdown.tone-critical,
+.detail-countdown.tone-critical {
+  color: #d92d20;
+}
+
+.event-countdown.tone-soon,
+.detail-countdown.tone-soon {
+  color: #c96a00;
+}
+
+.event-countdown.tone-warm,
+.detail-countdown.tone-warm {
+  color: #9c6b00;
+}
+
+.event-countdown.tone-cool,
+.detail-countdown.tone-cool {
+  color: #1769aa;
+}
+
+.event-countdown.tone-future,
+.detail-countdown.tone-future {
+  color: #6941c6;
+}
+
+.event-countdown.tone-long,
+.detail-countdown.tone-long {
+  color: #1f7a45;
+}
+
 .event-repeat {
   color: var(--tg-muted);
   font-size: 0.86rem;
