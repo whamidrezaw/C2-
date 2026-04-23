@@ -457,6 +457,9 @@ function getCountdownData(dateIso) {
   ${escapeHtml(countdown.fullText)}
 </div>
 
+    <div class="event-countdown tone-${countdown.tone}">
+  ${escapeHtml(countdown.fullText)}
+</div>
         <div class="event-bottom">
           <span class="status-dot status-${escapeHtml(event.notify_status)}"></span>
           <span class="event-status">${escapeHtml(STATUS_LABELS[event.notify_status] || "Unknown")}</span>
