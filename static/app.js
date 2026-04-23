@@ -82,10 +82,6 @@
     detailStatus: document.getElementById("detailStatus"),
     detailCountdown: document.getElementById("detailCountdown"),
     
-    <div class="detail-meta-box">
-  <span class="detail-meta-label">زمان باقی‌مانده</span>
-  <strong id="detailCountdown">—</strong>
-  </div>
     
     eventForm: document.getElementById("eventForm"),
     eventId: document.getElementById("eventId"),
@@ -414,72 +410,75 @@ function getCountdownData(dateIso) {
     totalDays: diff.totalDays,
   };
 }
-  function renderEvents() {
-    if (!els.eventsWrap) return;
+function renderEvents() {
+  if (!els.eventsWrap) return;
 
-    const wrap = els.eventsWrap;
-    wrap.innerHTML = "";
+  const wrap = els.eventsWrap;
+  wrap.innerHTML = "";
 
-    if (!state.filteredEvents.length) {
-      showEmptyOrError();
-      return;
-    }
+  if (!state.filteredEvents.length) {
+    showEmptyOrError();
+    return;
+  }
 
-    const fragment = document.createDocumentFragment();
+  const fragment = document.createDocumentFragment();
 
-    state.filteredEvents.forEach((event) => {
-      const article = document.createElement("article");
-      const tone = getUrgencyTone(event.dateiso);
-      const urgencyLabel = getUrgencyLabel(event.dateiso);
-      const countdown = getCountdownData(event.dateiso);
-      article.className = `event-card tone-${countdown.tone}`;
-      article.tabIndex = 0;
-      article.setAttribute("role", "button");
-      article.setAttribute("aria-label", `Show details for ${event.title}`);
+  state.filteredEvents.forEach((event) => {
+    const countdown = getCountdownData(event.dateiso);
 
-      article.innerHTML = `
-        <div class="event-card-top">
-          <div class="event-head">
-            <h3 class="event-title">${escapeHtml(event.title)}</h3>
-            <div class="event-badges">
-  ${event.pinned ? '<span class="mini-badge">📌 سنجاق‌شده</span>' : ""}
-  <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "General")}</span>
-  <span class="mini-badge mini-badge-urgency tone-${countdown.tone}">${escapeHtml(countdown.shortText)}</span>
-</div>
+    const article = document.createElement("article");
+    article.className = `event-card tone-${countdown.tone}`;
+    article.tabIndex = 0;
+    article.setAttribute("role", "button");
+    article.setAttribute("aria-label", `Show details for ${event.title}`);
 
-<div class="event-dates">
-  <span>${escapeHtml(event.dateiso)}</span>
-  <span>•</span>
-  <span>${escapeHtml(event.datejalali)}</span>
-</div>
+    article.innerHTML = `
+      <div class="event-card-top">
+        <div class="event-head">
+          <h3 class="event-title">${escapeHtml(event.title)}</h3>
 
-<div class="event-countdown tone-${countdown.tone}">
-  ${escapeHtml(countdown.fullText)}
-</div>
-
-    <div class="event-countdown tone-${countdown.tone}">
-  ${escapeHtml(countdown.fullText)}
-</div>
-        <div class="event-bottom">
-          <span class="status-dot status-${escapeHtml(event.notify_status)}"></span>
-          <span class="event-status">${escapeHtml(STATUS_LABELS[event.notify_status] || "Unknown")}</span>
+          <div class="event-badges">
+            ${event.pinned ? '<span class="mini-badge">📌 سنجاق‌شده</span>' : ""}
+            <span class="mini-badge mini-badge-soft">${escapeHtml(CATEGORY_LABELS[event.category] || "General")}</span>
+            <span class="mini-badge mini-badge-urgency tone-${countdown.tone}">
+              ${escapeHtml(countdown.shortText)}
+            </span>
+          </div>
         </div>
-      `;
 
-      article.addEventListener("click", () => openDetail(event.id));
-      article.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openDetail(event.id);
-        }
-      });
+        <span class="event-repeat">${escapeHtml(REPEAT_LABELS[event.repeat] || "One time")}</span>
+      </div>
 
-      fragment.appendChild(article);
+      <div class="event-dates">
+        <span>${escapeHtml(event.dateiso)}</span>
+        <span>•</span>
+        <span>${escapeHtml(event.datejalali)}</span>
+      </div>
+
+      <div class="event-countdown tone-${countdown.tone}">
+        ${escapeHtml(countdown.fullText)}
+      </div>
+
+      <div class="event-bottom">
+        <span class="status-dot status-${escapeHtml(event.notifystatus)}"></span>
+        <span class="event-status">${escapeHtml(STATUS_LABELS[event.notifystatus] || "Unknown")}</span>
+      </div>
+    `;
+
+    article.addEventListener("click", () => openDetail(event.id));
+    article.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openDetail(event.id);
+      }
     });
 
-    wrap.appendChild(fragment);
-    showEmptyOrError();
-  }
+    fragment.appendChild(article);
+  });
+
+  wrap.appendChild(fragment);
+  showEmptyOrError();
+}
 
   function openSheet(name, focusTarget = null) {
     state.lastFocusedElement = document.activeElement;
