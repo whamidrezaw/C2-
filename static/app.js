@@ -81,6 +81,11 @@
     detailTimezone: document.getElementById("detailTimezone"),
     detailStatus: document.getElementById("detailStatus"),
 
+    <div class="detail-meta-box">
+  <span class="detail-meta-label">زمان باقی‌مانده</span>
+  <strong id="detailCountdown">—</strong>
+  </div>
+    
     eventForm: document.getElementById("eventForm"),
     eventId: document.getElementById("eventId"),
     title: document.getElementById("title"),
