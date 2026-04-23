@@ -448,10 +448,7 @@ svg {
   background: rgba(47, 158, 91, 0.84);
 }
 
-.mini-badge-urgency {
-  font-weight: 700;
-  border-color: transparent;
-}
+
 
 .event-countdown {
   margin-top: 10px;
