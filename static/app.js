@@ -80,7 +80,8 @@
     detailDateJalali: document.getElementById("detailDateJalali"),
     detailTimezone: document.getElementById("detailTimezone"),
     detailStatus: document.getElementById("detailStatus"),
-
+    detailCountdown: document.getElementById("detailCountdown"),
+    
     <div class="detail-meta-box">
   <span class="detail-meta-label">زمان باقی‌مانده</span>
   <strong id="detailCountdown">—</strong>
