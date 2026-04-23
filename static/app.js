@@ -302,37 +302,111 @@ function startOfLocalDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function getDaysUntil(dateIso) {
+function addMonthsSafe(date, months) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const originalDay = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(originalDay, lastDay));
+  return d;
+}
+
+function diffCalendarParts(fromDate, toDate) {
+  let cursor = startOfLocalDay(fromDate);
+  const target = startOfLocalDay(toDate);
+
+  if (target < cursor) {
+    return { past: true, years: 0, months: 0, weeks: 0, days: 0, totalDays: Math.ceil((cursor - target) / 86400000) };
+  }
+
+  let years = 0;
+  let months = 0;
+
+  while (true) {
+    const next = addMonthsSafe(cursor, 12);
+    if (next <= target) {
+      years += 1;
+      cursor = next;
+    } else {
+      break;
+    }
+  }
+
+  while (true) {
+    const next = addMonthsSafe(cursor, 1);
+    if (next <= target) {
+      months += 1;
+      cursor = next;
+    } else {
+      break;
+    }
+  }
+
+  const remainingDays = Math.ceil((target - cursor) / 86400000);
+  const weeks = Math.floor(remainingDays / 7);
+  const days = remainingDays % 7;
+  const totalDays = Math.ceil((target - startOfLocalDay(fromDate)) / 86400000);
+
+  return { past: false, years, months, weeks, days, totalDays };
+}
+
+function formatPart(value, label) {
+  return value > 0 ? `${value} ${label}` : "";
+}
+
+function getCountdownData(dateIso) {
   const today = startOfLocalDay(new Date());
   const target = startOfLocalDay(new Date(`${dateIso}T00:00:00`));
-  const diffMs = target.getTime() - today.getTime();
-  return Math.ceil(diffMs / 86400000);
-}
+  const diff = diffCalendarParts(today, target);
 
-function getUrgencyTone(dateIso) {
-  const days = getDaysUntil(dateIso);
+  if (diff.past) {
+    return {
+      tone: "past",
+      shortText: "رویداد گذشته است",
+      fullText: "این رویداد گذشته است",
+      totalDays: -diff.totalDays,
+    };
+  }
 
-  if (days < 0) return "past";
-  if (days <= 7) return "critical";
-  if (days <= 30) return "soon";
-  if (days <= 90) return "warm";
-  if (days <= 180) return "cool";
-  if (days <= 365) return "future";
-  return "long";
-}
+  if (diff.totalDays === 0) {
+    return {
+      tone: "today",
+      shortText: "امروز",
+      fullText: "این رویداد امروز است",
+      totalDays: 0,
+    };
+  }
 
-function getUrgencyLabel(dateIso) {
-  const days = getDaysUntil(dateIso);
+  const parts = [
+    formatPart(diff.years, "سال"),
+    formatPart(diff.months, "ماه"),
+    formatPart(diff.weeks, "هفته"),
+    formatPart(diff.days, "روز"),
+  ].filter(Boolean);
 
-  if (days < 0) return "گذشته";
-  if (days === 0) return "امروز";
-  if (days === 1) return "فردا";
-  if (days <= 7) return `${days} روز مانده`;
-  if (days <= 30) return "کمتر از ۱ ماه";
-  if (days <= 90) return "کمتر از ۳ ماه";
-  if (days <= 180) return "کمتر از ۶ ماه";
-  if (days <= 365) return "کمتر از ۱ سال";
-  return "بیشتر از ۱ سال";
+  const compactParts = [
+    formatPart(diff.years, "سال"),
+    formatPart(diff.months, "ماه"),
+    formatPart(diff.weeks * 7 + diff.days, "روز"),
+  ].filter(Boolean);
+
+  const fullText = `${parts.join(" و ")} تا رویداد مانده`;
+  const shortText = `${compactParts.join(" و ")} مانده`;
+
+  let tone = "long";
+  if (diff.totalDays <= 7) tone = "critical";
+  else if (diff.totalDays <= 30) tone = "soon";
+  else if (diff.totalDays <= 90) tone = "warm";
+  else if (diff.totalDays <= 180) tone = "cool";
+  else if (diff.totalDays <= 365) tone = "future";
+
+  return {
+    tone,
+    shortText,
+    fullText,
+    totalDays: diff.totalDays,
+  };
 }
   function renderEvents() {
     if (!els.eventsWrap) return;
