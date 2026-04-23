@@ -294,7 +294,7 @@
           ? item.pinned
           : item.category === state.currentFilter;
 
-      const haystack = `${item.title} ${item.note || ""} ${item.date_iso} ${item.date_jalali}`.toLowerCase();
+      const haystack = `${item.title} ${item.note || ""} ${item.dateiso} ${item.datejalali}`.toLowerCase();
       const matchesSearch = !q || haystack.includes(q);
 
       return matchesFilter && matchesSearch;
@@ -564,8 +564,8 @@ function renderEvents() {
     state.editingEventId = event.id;
     if (els.eventId) els.eventId.value = event.id;
     if (els.title) els.title.value = event.title || "";
-    if (els.date) els.date.value = event.date_iso || "";
-    if (els.dateJalali) els.dateJalali.value = event.date_jalali || "";
+    if (els.date) els.date.value = event.dateiso || "";
+    if (els.dateJalali) els.dateJalali.value = event.datejalali || "";
     if (els.repeat) els.repeat.value = event.repeat || "none";
     if (els.category) els.category.value = event.category || "general";
     if (els.pin) els.pin.checked = !!event.pinned;
@@ -580,29 +580,30 @@ function renderEvents() {
     return state.events.find((item) => item.id === eventId) || null;
   }
 
-  function openDetail(eventId) {
-    const event = getEventById(eventId);
-    if (!event) return;
+function openDetail(eventId) {
+  const event = getEventById(eventId);
+  if (!event) return;
 
-    state.detailEventId = eventId;
+  state.detailEventId = eventId;
 
-    if (els.detailEventTitle) els.detailEventTitle.textContent = event.title || "—";
-    if (els.detailCategoryBadge) els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "General";
-    if (els.detailRepeatBadge) els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "One time";
-    if (els.detailDateIso) els.detailDateIso.textContent = event.date_iso || "—";
-    if (els.detailDateJalali) els.detailDateJalali.textContent = event.date_jalali || "—";
-    if (els.detailTimezone) els.detailTimezone.textContent = event.tz_name || "UTC";
-    if (els.detailStatus) els.detailStatus.textContent = STATUS_LABELS[event.notify_status] || "—";
-    if (els.detailNote) els.detailNote.value = event.note || "";
-    if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
+  const countdown = getCountdownData(event.dateiso);
 
-    openSheet("detailSheet", els.detailNote);
-    const countdown = getCountdownData(event.dateiso);
-if (els.detailCountdown) {
-  els.detailCountdown.textContent = countdown.fullText;
-  els.detailCountdown.className = `detail-countdown tone-${countdown.tone}`;
-}
+  if (els.detailEventTitle) els.detailEventTitle.textContent = event.title || "—";
+  if (els.detailCategoryBadge) els.detailCategoryBadge.textContent = CATEGORY_LABELS[event.category] || "General";
+  if (els.detailRepeatBadge) els.detailRepeatBadge.textContent = REPEAT_LABELS[event.repeat] || "One time";
+  if (els.detailDateIso) els.detailDateIso.textContent = event.dateiso || "—";
+  if (els.detailDateJalali) els.detailDateJalali.textContent = event.datejalali || "—";
+  if (els.detailTimezone) els.detailTimezone.textContent = event.tzname || "UTC";
+  if (els.detailStatus) els.detailStatus.textContent = STATUS_LABELS[event.notifystatus] || "—";
+  if (els.detailNote) els.detailNote.value = event.note || "";
+  if (els.detailPinBtn) els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
+  if (els.detailCountdown) {
+    els.detailCountdown.textContent = countdown.fullText;
+    els.detailCountdown.className = `detail-countdown tone-${countdown.tone}`;
   }
+
+  openSheet("detailSheet", els.detailNote);
+}
 
   async function submitEventForm(e) {
     e.preventDefault();
@@ -627,8 +628,8 @@ if (els.detailCountdown) {
     try {
       if (state.editingEventId) {
         await apiPost("/api/edit", {
-          event_id: state.editingEventId,
-          ...payload,
+          eventid: state.editingEventId,
+            ...payload,
         });
         showToast("Event updated.", "success");
       } else {
@@ -656,7 +657,7 @@ if (els.detailCountdown) {
 
     setLoading(true);
     try {
-      await apiPost("/api/delete", { event_id: event.id });
+      await apiPost("/api/delete", { eventid: event.id });
       closeSheets();
       showToast("Event deleted.", "success");
       await loadEvents();
@@ -674,8 +675,8 @@ if (els.detailCountdown) {
     setLoading(true);
     try {
       const data = await apiPost("/api/note", {
-        event_id: event.id,
-        note: els.detailNote?.value.trim() || "",
+      eventid: event.id,
+      note: els.detailNote?.value.trim() || "",
       });
 
       const target = getEventById(event.id);
@@ -696,32 +697,32 @@ if (els.detailCountdown) {
     els.detailNote.value = event.note || "";
   }
 
-  async function toggleCurrentPin() {
-    const event = getEventById(state.detailEventId);
-    if (!event) return;
+async function toggleCurrentPin() {
+  const event = getEventById(state.detailEventId);
+  if (!event) return;
 
-    const nextPinned = !event.pinned;
+  const nextPinned = !event.pinned;
 
-    setLoading(true);
-    try {
-      const data = await apiPost("/api/pin", {
-        event_id: event.id,
-        pinned: nextPinned,
-      });
+  setLoading(true);
+  try {
+    const data = await apiPost("/api/pin", {
+      eventid: event.id,
+      pinned: nextPinned,
+    });
 
-      event.pinned = !!data.pinned;
-      if (els.detailPinBtn) {
-        els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
-      }
-      renderEvents();
-      updateCounters();
-      showToast(event.pinned ? "Event pinned." : "Event unpinned.", "success");
-    } catch (error) {
-      showToast(normalizeErrorMessage(error), "error");
-    } finally {
-      setLoading(false);
+    event.pinned = !!data.pinned;
+    if (els.detailPinBtn) {
+      els.detailPinBtn.textContent = event.pinned ? "Unpin" : "Pin";
     }
+
+    await loadEvents();
+    showToast(event.pinned ? "Event pinned." : "Event unpinned.", "success");
+  } catch (error) {
+    showToast(normalizeErrorMessage(error), "error");
+  } finally {
+    setLoading(false);
   }
+}
 
   async function shareCurrentEvent() {
     const event = getEventById(state.detailEventId);
@@ -729,8 +730,8 @@ if (els.detailCountdown) {
 
     const text = [
       `📅 ${event.title}`,
-      `Gregorian: ${event.date_iso}`,
-      `Jalali: ${event.date_jalali}`,
+      `Gregorian: ${event.dateiso}`,
+      `Jalali: ${event.datejalali}`,
       `Repeat: ${REPEAT_LABELS[event.repeat] || "One time"}`,
       event.note ? `Note: ${event.note}` : "",
     ]
