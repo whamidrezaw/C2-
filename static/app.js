@@ -964,7 +964,7 @@ function hideConfirmDialog() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (els.confirmOverlay && !els.confirmOverlay.hidden) {
-          els.confirmOverlay.hidden = true;
+          hideConfirmDialog();
           return;
         }
         if (state.activeSheet) closeSheets();
