@@ -85,7 +85,6 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
 # the data_check_string, otherwise HMAC verification fails for those clients.
 _EXCLUDED_KEYS = frozenset({"hash"})
 
-
 def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
     return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
