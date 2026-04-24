@@ -233,6 +233,13 @@
     });
   }
 
+function hideConfirmDialog() {
+  if (!els.confirmOverlay) return;
+  els.confirmOverlay.hidden = true;
+  els.confirmOverlay.classList.add("hidden");
+  els.confirmOverlay.setAttribute("aria-hidden", "true");
+}
+  
   /* ── API ────────────────────────────────────────────── */
   async function apiPost(path, payload) {
     const response = await fetch(path, {
