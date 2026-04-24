@@ -973,7 +973,7 @@ function hideConfirmDialog() {
   }
 
   /* ── Boot ────────────────────────────────────────────── */
-  initTelegram();
-  bindEvents();
-  loadEvents();
-})();
+initTelegram();
+bindEvents();
+hideConfirmDialog();
+loadEvents();
