@@ -169,8 +169,8 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    dcs = build_data_check_string(parsed)
-    logger.warning("DCS_HEX=%s", dcs.encode("utf-8").hex())
+#    dcs = build_data_check_string(parsed)
+#    logger.warning("DCS_HEX=%s", dcs.encode("utf-8").hex())
 
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
