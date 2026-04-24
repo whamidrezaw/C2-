@@ -204,48 +204,35 @@
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
-function showConfirm({ title, text, okLabel = "Confirm", icon = "⚠️" }) {
-  return new Promise((resolve) => {
-    if (!els.confirmOverlay) {
-      resolve(true);
-      return;
-    }
+  function showConfirm({ title, text, okLabel = "Confirm", icon = "🗑️" }) {
+    return new Promise((resolve) => {
+      if (!els.confirmOverlay) { resolve(true); return; }
 
-    if (els.confirmTitle) els.confirmTitle.textContent = title;
-    if (els.confirmText) els.confirmText.textContent = text;
-    if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
+      if (els.confirmTitle) els.confirmTitle.textContent = title;
+      if (els.confirmText)  els.confirmText.textContent  = text;
+      if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
+      const iconEl = els.confirmOverlay.querySelector(".confirm-icon");
+      if (iconEl) iconEl.textContent = icon;
 
-    const iconEl = els.confirmOverlay.querySelector(".confirm-icon");
-    if (iconEl) iconEl.textContent = icon;
+      els.confirmOverlay.hidden = false;
+      els.confirmOverlay.removeAttribute("aria-hidden");
 
-    els.confirmOverlay.hidden = false;
-    els.confirmOverlay.classList.remove("hidden");
-    els.confirmOverlay.setAttribute("aria-hidden", "false");
+      const cleanup = (result) => {
+        els.confirmOverlay.hidden = true;
+        els.confirmOverlay.setAttribute("aria-hidden", "true");
+        resolve(result);
+      };
 
-    const cleanup = (result) => {
-      hideConfirmDialog();
-      resolve(result);
-    };
+      const handleOk     = () => cleanup(true);
+      const handleCancel = () => cleanup(false);
+      const handleKey    = (e) => { if (e.key === "Escape") cleanup(false); };
 
-    const handleOk = () => cleanup(true);
-    const handleCancel = () => cleanup(false);
-    const handleKey = (e) => {
-      if (e.key === "Escape") cleanup(false);
-    };
+      els.confirmOkBtn?.addEventListener("click", handleOk, { once: true });
+      els.confirmCancelBtn?.addEventListener("click", handleCancel, { once: true });
+      document.addEventListener("keydown", handleKey, { once: true });
+    });
+  }
 
-    els.confirmOkBtn?.addEventListener("click", handleOk, { once: true });
-    els.confirmCancelBtn?.addEventListener("click", handleCancel, { once: true });
-    document.addEventListener("keydown", handleKey, { once: true });
-  });
-}
-
-function hideConfirmDialog() {
-  if (!els.confirmOverlay) return;
-  els.confirmOverlay.hidden = true;
-  els.confirmOverlay.classList.add("hidden");
-  els.confirmOverlay.setAttribute("aria-hidden", "true");
-}
-  
   /* ── API ────────────────────────────────────────────── */
   async function apiPost(path, payload) {
     const response = await fetch(path, {
@@ -964,7 +951,7 @@ function hideConfirmDialog() {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (els.confirmOverlay && !els.confirmOverlay.hidden) {
-          hideConfirmDialog();
+          els.confirmOverlay.hidden = true;
           return;
         }
         if (state.activeSheet) closeSheets();
@@ -973,7 +960,7 @@ function hideConfirmDialog() {
   }
 
   /* ── Boot ────────────────────────────────────────────── */
-initTelegram();
-bindEvents();
-hideConfirmDialog();
-loadEvents();
+  initTelegram();
+  bindEvents();
+  loadEvents();
+})();
