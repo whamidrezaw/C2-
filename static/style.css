@@ -135,6 +135,10 @@ a { color: var(--link); }
   clip-path: inset(50%); overflow: hidden;
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* ── Noscript ────────────────────────────────────────── */
 .noscript-box {
   margin: 40px auto; max-width: 480px; padding: 32px;
