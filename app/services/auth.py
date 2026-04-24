@@ -159,6 +159,9 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
+logger.warning("PARSED keys=%s", sorted(parsed.keys()))
+logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
+  
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
     if not hmac.compare_digest(computed_hash, received_hash):
