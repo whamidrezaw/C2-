@@ -1,8 +1,12 @@
+"""
+app/services/events.py — Fixed v2.0
+Fixes:
+  - Removed duplicate 'import logging' statement
+  - Cleaner import order (PEP 8)
+"""
 from __future__ import annotations
 
 import logging
-
-logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -17,28 +21,27 @@ from app.schemas.requests import (
     SaveNoteRequest,
 )
 from app.schemas.responses import EventOut
-from app.utils.dates import expire_for_repeat, safe_zoneinfo, to_jalali, build_event_datetimes
+from app.utils.dates import (
+    build_event_datetimes,
+    expire_for_repeat,
+    safe_zoneinfo,
+    to_jalali,
+)
 from app.utils.ids import safe_object_id
-import logging
+
+logger = logging.getLogger("tm_pro.events")
+
 PAGE_SIZE = 50
 
 VALID_REPEATS = {"none", "daily", "weekly", "monthly", "yearly"}
 VALID_CATEGORIES = {
-    "general",
-    "birthday",
-    "work",
-    "family",
-    "health",
-    "travel",
-    "finance",
-    "study",
-    "other",
+    "general", "birthday", "work", "family",
+    "health", "travel", "finance", "study", "other",
 }
 
 
 def serialize_event(doc: dict) -> EventOut:
     date_iso = doc.get("date_iso", "")
-
     return EventOut(
         id=str(doc["_id"]),
         title=doc.get("title", ""),
@@ -59,20 +62,17 @@ def _normalize_event_input(
 ) -> dict:
     settings = settings or get_settings()
 
-    title = payload.title.strip()
-    repeat = payload.repeat.strip().lower()
+    title    = payload.title.strip()
+    repeat   = payload.repeat.strip().lower()
     category = payload.category.strip().lower()
-    note = payload.note.strip()
+    note     = payload.note.strip()
 
     if len(title) > settings.max_title_len:
         raise HTTPException(status_code=400, detail="TITLE_TOO_LONG")
-
     if len(note) > settings.max_note_len:
         raise HTTPException(status_code=400, detail="NOTE_TOO_LONG")
-
     if repeat not in VALID_REPEATS:
         raise HTTPException(status_code=400, detail="INVALID_REPEAT")
-
     if category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="INVALID_CATEGORY")
 
@@ -87,19 +87,19 @@ def _normalize_event_input(
         raise HTTPException(status_code=400, detail="INVALID_DATE") from exc
 
     return {
-        "title": title,
-        "date_iso": payload.date,
-        "next_notify_at": notify_utc,
-        "event_ts_utc": event_utc,
-        "expire_at": expire_for_repeat(notify_utc, repeat),
-        "repeat": repeat,
-        "tz_name": tz_name,
-        "notify_status": "pending",
-        "notify_attempts": 0,
+        "title":                title,
+        "date_iso":             payload.date,
+        "next_notify_at":       notify_utc,
+        "event_ts_utc":         event_utc,
+        "expire_at":            expire_for_repeat(notify_utc, repeat),
+        "repeat":               repeat,
+        "tz_name":              tz_name,
+        "notify_status":        "pending",
+        "notify_attempts":      0,
         "processing_started_at": None,
-        "category": category,
-        "note": note,
-        "pinned": payload.pinned,
+        "category":             category,
+        "note":                 note,
+        "pinned":               payload.pinned,
     }
 
 
@@ -109,7 +109,6 @@ async def list_events_for_user(
 ) -> tuple[list[EventOut], bool]:
     events_coll = get_events_collection()
 
-    # یکی اضافه می‌خونیم تا بفهمیم صفحه بعدی هست یا نه
     cursor = (
         events_coll.find({"user_id": user_id})
         .sort([("pinned", -1), ("event_ts_utc", 1)])
@@ -123,9 +122,10 @@ async def list_events_for_user(
 
     has_more = len(items) > PAGE_SIZE
     if has_more:
-        items = items[:PAGE_SIZE]  # آیتم اضافه را حذف می‌کنیم
+        items = items[:PAGE_SIZE]
 
     return items, has_more
+
 
 async def add_event_for_user(
     user_id: str,
@@ -137,11 +137,8 @@ async def add_event_for_user(
     users_coll = get_users_collection()
 
     logger.info(
-        "add_event_for_user called user_id=%s title=%s date=%s tz=%s",
-        user_id,
-        payload.title,
-        payload.date,
-        payload.timezone,
+        "add_event user_id=%s title=%r date=%s tz=%s",
+        user_id, payload.title, payload.date, payload.timezone,
     )
 
     count = await events_coll.count_documents({"user_id": user_id})
@@ -150,13 +147,7 @@ async def add_event_for_user(
 
     event_data = _normalize_event_input(payload, settings)
     now = datetime.now(timezone.utc)
-    event_data.update(
-        {
-            "user_id": user_id,
-            "created_at": now,
-            "updated_at": now,
-        }
-    )
+    event_data.update({"user_id": user_id, "created_at": now, "updated_at": now})
 
     await users_coll.update_one(
         {"_id": user_id},
@@ -166,7 +157,8 @@ async def add_event_for_user(
 
     result = await events_coll.insert_one(event_data)
     logger.info("event inserted user_id=%s event_id=%s", user_id, result.inserted_id)
-    
+
+
 async def edit_event_for_user(
     user_id: str,
     payload: EditEventRequest,
@@ -224,12 +216,7 @@ async def save_note_for_user(
 
     result = await events_coll.update_one(
         {"_id": oid, "user_id": user_id},
-        {
-            "$set": {
-                "note": note,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        },
+        {"$set": {"note": note, "updated_at": datetime.now(timezone.utc)}},
     )
 
     if result.matched_count == 0:
@@ -248,12 +235,7 @@ async def set_pin_for_user(user_id: str, payload: PinEventRequest) -> bool:
 
     result = await events_coll.update_one(
         {"_id": oid, "user_id": user_id},
-        {
-            "$set": {
-                "pinned": payload.pinned,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        },
+        {"$set": {"pinned": payload.pinned, "updated_at": datetime.now(timezone.utc)}},
     )
 
     if result.matched_count == 0:
