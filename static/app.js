@@ -204,34 +204,40 @@
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
-  function showConfirm({ title, text, okLabel = "Confirm", icon = "🗑️" }) {
-    return new Promise((resolve) => {
-      if (!els.confirmOverlay) { resolve(true); return; }
+function showConfirm({ title, text, okLabel = "Confirm", icon = "⚠️" }) {
+  return new Promise((resolve) => {
+    if (!els.confirmOverlay) {
+      resolve(true);
+      return;
+    }
 
-      if (els.confirmTitle) els.confirmTitle.textContent = title;
-      if (els.confirmText)  els.confirmText.textContent  = text;
-      if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
-      const iconEl = els.confirmOverlay.querySelector(".confirm-icon");
-      if (iconEl) iconEl.textContent = icon;
+    if (els.confirmTitle) els.confirmTitle.textContent = title;
+    if (els.confirmText) els.confirmText.textContent = text;
+    if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
 
-      els.confirmOverlay.hidden = false;
-      els.confirmOverlay.removeAttribute("aria-hidden");
+    const iconEl = els.confirmOverlay.querySelector(".confirm-icon");
+    if (iconEl) iconEl.textContent = icon;
 
-      const cleanup = (result) => {
-        els.confirmOverlay.hidden = true;
-        els.confirmOverlay.setAttribute("aria-hidden", "true");
-        resolve(result);
-      };
+    els.confirmOverlay.hidden = false;
+    els.confirmOverlay.classList.remove("hidden");
+    els.confirmOverlay.setAttribute("aria-hidden", "false");
 
-      const handleOk     = () => cleanup(true);
-      const handleCancel = () => cleanup(false);
-      const handleKey    = (e) => { if (e.key === "Escape") cleanup(false); };
+    const cleanup = (result) => {
+      hideConfirmDialog();
+      resolve(result);
+    };
 
-      els.confirmOkBtn?.addEventListener("click", handleOk, { once: true });
-      els.confirmCancelBtn?.addEventListener("click", handleCancel, { once: true });
-      document.addEventListener("keydown", handleKey, { once: true });
-    });
-  }
+    const handleOk = () => cleanup(true);
+    const handleCancel = () => cleanup(false);
+    const handleKey = (e) => {
+      if (e.key === "Escape") cleanup(false);
+    };
+
+    els.confirmOkBtn?.addEventListener("click", handleOk, { once: true });
+    els.confirmCancelBtn?.addEventListener("click", handleCancel, { once: true });
+    document.addEventListener("keydown", handleKey, { once: true });
+  });
+}
 
 function hideConfirmDialog() {
   if (!els.confirmOverlay) return;
