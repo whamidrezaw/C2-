@@ -7,6 +7,9 @@ Fixes:
 from __future__ import annotations
 
 import logging
+
+logger = logging.getLogger("tm_pro.events")
+
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
