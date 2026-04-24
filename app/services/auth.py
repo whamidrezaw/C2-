@@ -143,6 +143,11 @@ def validate_auth_date(
         raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE")
 
 
+def build_data_check_string(parsed: dict[str, str]) -> str:
+    filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
+    return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
+
+
 async def validate_init_data(
     request: Request,
     init_data: str,
@@ -159,9 +164,9 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-logger.warning("PARSED keys=%s", sorted(parsed.keys()))
-logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
-  
+    logger.warning("PARSED keys=%s", sorted(parsed.keys()))
+    logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
+
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
     if not hmac.compare_digest(computed_hash, received_hash):
@@ -199,7 +204,6 @@ logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
         "auth_date": parsed.get("auth_date"),
         "raw": parsed,
     }
-
 
 async def get_authenticated_user_id(
     request: Request,
