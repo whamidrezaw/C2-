@@ -101,12 +101,22 @@ def compute_telegram_hash(init_data_map: dict[str, str], bot_token: str) -> str:
     return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
 
+from urllib.parse import unquote
+
 def parse_init_data(init_data: str) -> dict[str, str]:
     if not init_data:
         raise HTTPException(status_code=403, detail="NO_DATA")
-    parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+
+    parsed: dict[str, str] = {}
+    for chunk in init_data.split("&"):
+        if "=" not in chunk:
+            continue
+        key, value = chunk.split("=", 1)
+        parsed[key] = unquote(value)
+
     if not parsed:
         raise HTTPException(status_code=403, detail="INVALID_INIT_DATA")
+
     return parsed
 
 
