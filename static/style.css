@@ -3,11 +3,6 @@
    Vibrant, mobile-first, Telegram Mini App
    ═══════════════════════════════════════════════════════════ */
 
-[hidden],
-.hidden {
-  display: none !important;
-}
-
 /* ── Design Tokens ─────────────────────────────────────── */
 :root {
   /* Brand */
@@ -138,10 +133,6 @@ a { color: var(--link); }
   position: absolute; width: 1px; height: 1px; margin: -1px;
   border: 0; padding: 0; white-space: nowrap;
   clip-path: inset(50%); overflow: hidden;
-}
-
-.hidden {
-  display: none !important;
 }
 
 /* ── Noscript ────────────────────────────────────────── */
@@ -806,7 +797,6 @@ a { color: var(--link); }
 .confirm-title { margin: 0 0 8px; font-size: 1.1rem; font-weight: 800; }
 .confirm-text { margin: 0 0 24px; color: var(--text-muted); font-size: 0.88rem; }
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
 
 /* ── Toast ───────────────────────────────────────────── */
 .toast {
