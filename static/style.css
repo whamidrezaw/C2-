@@ -802,12 +802,6 @@ a { color: var(--link); }
 .confirm-text { margin: 0 0 24px; color: var(--text-muted); font-size: 0.88rem; }
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-function hideConfirmDialog() {
-  if (!els.confirmOverlay) return;
-  els.confirmOverlay.hidden = true;
-  els.confirmOverlay.classList.add("hidden");
-  els.confirmOverlay.setAttribute("aria-hidden", "true");
-}
 
 /* ── Toast ───────────────────────────────────────────── */
 .toast {
