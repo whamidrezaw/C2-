@@ -7,9 +7,11 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="TimeManager Pro — Smart event reminders with Gregorian and Jalali dates for Telegram.">
   <title>TimeManager Pro</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -24,7 +26,6 @@
     </div>
   </noscript>
 
-  <!-- ── Header ─────────────────────────────────────── -->
   <header class="app-header">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">
@@ -35,44 +36,42 @@
           <circle cx="12" cy="15" r="2" fill="currentColor"/>
         </svg>
       </div>
+
       <div class="brand-copy">
         <strong class="brand-title">TimeManager Pro</strong>
         <span class="brand-subtitle">Smart reminders in Telegram</span>
       </div>
     </div>
+
     <button type="button" id="refreshBtn" class="icon-btn" aria-label="Refresh events" title="Refresh">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M23 4v6h-6"/>
+        <path d="M1 20v-6h6"/>
         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
       </svg>
     </button>
   </header>
 
-  <!-- ── Main Content ───────────────────────────────── -->
   <main id="eventList" class="app-main">
 
-    <!-- Hero Card -->
-    <section class="hero-card">
-      <div class="hero-left">
-        <div class="hero-badge">✨ Your Personal Planner</div>
-        <h1 class="hero-title">Stay on top of every moment</h1>
-        <p class="hero-text">Save events, birthdays & tasks — get reminders directly in Telegram.</p>
+    <section class="hero-card" aria-labelledby="heroTitle">
+      <div class="hero-copy hero-left">
+        <h1 id="heroTitle" class="hero-title">Stay on top of every moment</h1>
+        <p class="hero-text">Save events, birthdays, and tasks — get reminders directly inside Telegram.</p>
       </div>
-      <div class="hero-stats">
-        <div class="stat-box">
-          <span class="stat-icon">📅</span>
+
+      <div class="hero-meta hero-stats" aria-label="Overview">
+        <div class="meta-pill stat-box">
+          <span class="meta-pill-label stat-label">Events</span>
           <strong id="eventCount" class="stat-value">0</strong>
-          <span class="stat-label">Events</span>
         </div>
-        <div class="stat-box">
-          <span class="stat-icon">🔔</span>
+        <div class="meta-pill stat-box">
+          <span class="meta-pill-label stat-label">Status</span>
           <strong id="syncStatus" class="stat-value">Ready</strong>
-          <span class="stat-label">Status</span>
         </div>
       </div>
     </section>
 
-    <!-- Toolbar -->
     <section class="toolbar" aria-label="Filters and search">
       <div class="toolbar-row" id="filterRow" role="group" aria-label="Category filter">
         <button type="button" class="seg-btn is-active" data-filter="all">🌐 All</button>
@@ -85,92 +84,87 @@
         <button type="button" class="seg-btn" data-filter="finance">💰 Finance</button>
         <button type="button" class="seg-btn" data-filter="study">📚 Study</button>
       </div>
+
       <label class="search-wrap" for="searchInput">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
         </svg>
         <input type="search" id="searchInput" class="search-input" placeholder="Search events…" autocomplete="off" inputmode="search">
       </label>
     </section>
 
-    <!-- Skeleton (hidden by default, shown while loading) -->
     <section id="skeletonState" class="skeleton-list" hidden>
-      <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-sub"></div><div class="sk-line sk-sub short"></div></div>
-      <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-sub"></div><div class="sk-line sk-sub short"></div></div>
-      <div class="skeleton-card"><div class="sk-line sk-title"></div><div class="sk-line sk-sub"></div></div>
+      <div class="skeleton-card">
+        <div class="sk-line sk-title"></div>
+        <div class="sk-line sk-sub"></div>
+        <div class="sk-line sk-sub short"></div>
+      </div>
+      <div class="skeleton-card">
+        <div class="sk-line sk-title"></div>
+        <div class="sk-line sk-sub"></div>
+        <div class="sk-line sk-sub short"></div>
+      </div>
+      <div class="skeleton-card">
+        <div class="sk-line sk-title"></div>
+        <div class="sk-line sk-sub"></div>
+      </div>
     </section>
 
-    <!-- Empty State -->
     <section id="listState" class="empty-state" hidden>
-      <div class="empty-illustration" aria-hidden="true">
-        <div class="empty-circle">
-          <span class="empty-emoji">🗓️</span>
-        </div>
-        <div class="empty-dots">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
-      <h2 class="empty-state-title">No events yet!</h2>
+      <div class="empty-state-icon" aria-hidden="true">🗓️</div>
+      <h2 class="empty-state-title">No events yet</h2>
       <p class="empty-state-text">Add your first event and start receiving smart reminders directly in Telegram.</p>
-      <button type="button" id="emptyAddBtn" class="btn-primary btn-cta">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <button type="button" id="emptyAddBtn" class="btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
         Add your first event
       </button>
-      <div class="empty-hints">
-        <div class="hint-chip">🎂 Birthdays</div>
-        <div class="hint-chip">💼 Meetings</div>
-        <div class="hint-chip">❤️ Appointments</div>
-        <div class="hint-chip">✈️ Travel</div>
-      </div>
     </section>
 
-    <!-- Error State -->
     <section id="listErrorState" class="empty-state is-error" hidden>
-      <div class="empty-illustration" aria-hidden="true">
-        <div class="empty-circle is-error-circle"><span class="empty-emoji">⚠️</span></div>
-      </div>
+      <div class="empty-state-icon" aria-hidden="true">⚠️</div>
       <h2 class="empty-state-title">Something went wrong</h2>
       <p class="empty-state-text">Could not connect to the server. Please check your connection and try again.</p>
       <button type="button" id="retryBtn" class="btn-primary">Try again</button>
     </section>
 
-    <!-- No Results State -->
     <section id="noResultsState" class="empty-state" hidden>
-      <div class="empty-illustration" aria-hidden="true">
-        <div class="empty-circle"><span class="empty-emoji">🔍</span></div>
-      </div>
+      <div class="empty-state-icon" aria-hidden="true">🔍</div>
       <h2 class="empty-state-title">No results found</h2>
       <p class="empty-state-text">Try a different search term or filter.</p>
     </section>
 
-    <!-- Events List -->
     <section id="eventsWrap" class="events-wrap" aria-live="polite" aria-label="Event list"></section>
 
-    <!-- Load More -->
     <div id="loadMoreWrap" class="load-more-wrap" hidden>
       <button type="button" id="loadMoreBtn" class="btn-secondary btn-load-more">Load more events</button>
     </div>
   </main>
 
-  <!-- ── Floating Add Button ────────────────────────── -->
   <button type="button" id="openComposerBtn" class="floating-add-btn" aria-label="Add event" aria-controls="composerSheet" aria-expanded="false">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
     <span>Add Event</span>
   </button>
 
-  <!-- ── Sheet Overlay ──────────────────────────────── -->
   <div id="sheetOverlay" class="sheet-overlay" hidden aria-hidden="true"></div>
 
-  <!-- ── Composer Sheet ─────────────────────────────── -->
   <section id="composerSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="composerTitle" aria-hidden="true" hidden>
     <div class="sheet-handle" aria-hidden="true"></div>
+
     <div class="sheet-head">
       <div>
         <h2 id="composerTitle" class="sheet-title">New Event</h2>
         <p id="composerSubtitle" class="sheet-subtitle">Set title, date and repeat pattern.</p>
       </div>
+
       <button type="button" id="closeComposerX" class="icon-btn" aria-label="Close form">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
       </button>
     </div>
 
@@ -179,7 +173,10 @@
 
       <div class="field-group">
         <label class="field-label" for="title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
           Event Title
         </label>
         <input type="text" id="title" class="field-input" placeholder="e.g. Mom's Birthday" maxlength="200" autocomplete="off" required>
@@ -188,14 +185,21 @@
       <div class="grid-2">
         <div class="field-group">
           <label class="field-label" for="date">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
             Gregorian Date
           </label>
           <input type="date" id="date" class="field-input" required>
         </div>
+
         <div class="field-group">
           <label class="field-label" for="date-jalali">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4l3 3"/>
+            </svg>
             Jalali Date
           </label>
           <input type="text" id="date-jalali" class="field-input" placeholder="1405/01/31" maxlength="10" inputmode="numeric" autocomplete="off" dir="ltr">
@@ -205,10 +209,15 @@
       <div class="grid-2">
         <div class="field-group">
           <label class="field-label" for="repeat">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M17 1l4 4-4 4"/>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <path d="M7 23l-4-4 4-4"/>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
             Repeat
           </label>
-          <select id="repeat" class="field-input field-select">
+          <select id="repeat" class="field-input">
             <option value="none">One time</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -216,12 +225,16 @@
             <option value="yearly">Yearly</option>
           </select>
         </div>
+
         <div class="field-group">
           <label class="field-label" for="category">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
             Category
           </label>
-          <select id="category" class="field-input field-select">
+          <select id="category" class="field-input">
             <option value="general">🌐 General</option>
             <option value="birthday">🎂 Birthday</option>
             <option value="work">💼 Work</option>
@@ -237,10 +250,13 @@
 
       <div class="field-group">
         <label class="field-label" for="reminderHour">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
           Reminder Time
         </label>
-        <select id="reminderHour" class="field-input field-select">
+        <select id="reminderHour" class="field-input">
           <option value="7">7:00 AM</option>
           <option value="8">8:00 AM</option>
           <option value="9" selected>9:00 AM (default)</option>
@@ -261,33 +277,45 @@
 
       <div class="field-group">
         <label class="field-label" for="note">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
           Note <span class="field-optional">(optional)</span>
         </label>
         <textarea id="note" class="field-input field-textarea" rows="4" maxlength="2000" placeholder="Add details, tasks, or a checklist…"></textarea>
-        <span class="char-count" id="noteCharCount">0 / 2000</span>
       </div>
 
       <div class="form-actions">
         <button type="button" id="cancelBtn" class="btn-secondary">Cancel</button>
         <button type="submit" id="saveEventBtn" class="btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
           Save Event
         </button>
       </div>
     </form>
   </section>
 
-  <!-- ── Detail Sheet ───────────────────────────────── -->
   <section id="detailSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" hidden>
     <div class="sheet-handle" aria-hidden="true"></div>
+
     <div class="sheet-head">
       <div>
         <h2 id="detailTitle" class="sheet-title">Event Details</h2>
         <p id="detailSubtitle" class="sheet-subtitle">Full view and actions</p>
       </div>
+
       <button type="button" id="closeDetailX" class="icon-btn" aria-label="Close details">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
       </button>
     </div>
 
@@ -295,18 +323,16 @@
       <div class="detail-topline">
         <span id="detailCategoryBadge" class="badge">General</span>
         <span id="detailRepeatBadge" class="badge badge-muted">One time</span>
-        <span id="detailPinnedBadge" class="badge badge-pin" hidden>📌 Pinned</span>
+        <span id="detailPinnedBadge" class="badge" hidden>📌 Pinned</span>
       </div>
 
       <h3 id="detailEventTitle" class="detail-event-title">—</h3>
 
-      <!-- Countdown Ring -->
-      <div class="countdown-ring-wrap" id="countdownRingWrap">
-        <div class="countdown-ring" id="countdownRing">
-          <span id="countdownDays" class="ring-days">—</span>
-          <span class="ring-label">days</span>
-        </div>
-        <div id="detailCountdownText" class="countdown-ring-text">—</div>
+      <div id="countdownRingWrap" class="detail-meta-box">
+        <span class="detail-meta-label">⏳ Countdown</span>
+        <strong id="countdownDays">—</strong>
+        <span id="detailCountdownText" class="detail-countdown">—</span>
+        <div id="countdownRing" hidden></div>
       </div>
 
       <div class="detail-meta-grid">
@@ -329,24 +355,42 @@
       </div>
 
       <div class="detail-actions">
-        <button type="button" id="detailEditBtn" class="btn-action btn-action-edit">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <button type="button" id="detailEditBtn" class="btn-secondary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
           Edit
         </button>
-        <button type="button" id="detailShareBtn" class="btn-action btn-action-share">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+
+        <button type="button" id="detailShareBtn" class="btn-secondary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3"/>
+            <circle cx="6" cy="12" r="3"/>
+            <circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
           Share
         </button>
-        <button type="button" id="detailPinBtn" class="btn-action btn-action-pin">📌 Pin</button>
-        <button type="button" id="detailDeleteBtn" class="btn-action btn-action-delete">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+
+        <button type="button" id="detailPinBtn" class="btn-secondary">📌 Pin</button>
+
+        <button type="button" id="detailDeleteBtn" class="btn-danger">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
           Delete
         </button>
       </div>
 
       <div class="field-group">
         <label class="field-label" for="detailNote">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
           Event Note
         </label>
         <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" placeholder="Write a note, checklist, or details…"></textarea>
@@ -359,7 +403,6 @@
     </article>
   </section>
 
-  <!-- ── Custom Confirm Dialog ──────────────────────── -->
   <div id="confirmOverlay" class="confirm-overlay" hidden aria-hidden="true">
     <div class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
       <div class="confirm-icon" id="confirmIcon">🗑️</div>
@@ -372,9 +415,8 @@
     </div>
   </div>
 
-  <!-- ── Toast ─────────────────────────────────────── -->
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script src="/static/app.js" defer></script>
 </body>
-  </html>
+              </html>
