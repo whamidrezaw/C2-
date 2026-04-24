@@ -1,5 +1,11 @@
+"""
+app/services/auth.py — Fixed v2.0
+Fixes:
+  - 'signature' field now excluded from data_check_string (was: only 'hash' excluded)
+  - Cleaner import order
+"""
 from __future__ import annotations
-from pymongo import ReturnDocument
+
 import hashlib
 import hmac
 import json
@@ -10,14 +16,13 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import HTTPException, Request
+from pymongo import ReturnDocument
 
 from app.config import Settings, get_settings
-#from datetime import datetime, timedelta, timezone
-#from fastapi import HTTPException, Request
-#from pymongo import ReturnDocument
+
 logger = logging.getLogger("tm_pro.auth")
 
-# ─── Fallback in-memory store (فقط برای تست یا وقتی DB در دسترس نیست) ──────
+# ── Fallback in-memory rate store (for tests / DB-unavailable) ───────────────
 _rate_store: dict[str, list[float]] = {}
 
 
@@ -29,17 +34,17 @@ def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
 
 
 def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
-    """Fallback in-memory rate limit — فقط وقتی DB در دسترس نیست."""
+    """Fallback in-memory rate limit — only used when MongoDB is unavailable."""
     history = _prune_rate_history(user_id)
     if len(history) >= settings.rate_limit_count:
-        logger.warning("Rate limit exceeded (memory): user_id=%s", user_id)
+        logger.warning("Rate limit exceeded (memory fallback): user_id=%s", user_id)
         raise HTTPException(status_code=429, detail="RATE_LIMIT")
     history.append(time.time())
     _rate_store[user_id] = history
 
 
 def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
-    """نسخه sync — فقط برای تست‌ها استفاده می‌شه."""
+    """Sync version — only used in tests."""
     settings = settings or get_settings()
     _check_rate_limit_memory(user_id, settings)
 
@@ -47,7 +52,6 @@ def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
 async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
     try:
         from app.db import get_database
-
         db = get_database()
         rate_coll = db["rate_limits"]
 
@@ -74,14 +78,20 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
         _check_rate_limit_memory(user_id, settings)
 
 
-# ─── توابع اصلی ─────────────────────────────────────────────────────────────
+# ── Core auth functions ───────────────────────────────────────────────────────
+
+# ✅ FIX: 'signature' is now excluded alongside 'hash'
+# Telegram added 'signature' field in newer clients — it must NOT be part of
+# the data_check_string, otherwise HMAC verification fails for those clients.
+_EXCLUDED_KEYS = frozenset({"hash", "signature"})
+
 
 def build_data_check_string(parsed: dict[str, str]) -> str:
-    filtered = {
-        key: value
-        for key, value in parsed.items()
-        if key != "hash"
-    }
+    """
+    Build the data-check string per Telegram spec.
+    Excludes 'hash' and 'signature' fields, sorts remaining keys alphabetically.
+    """
+    filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
     return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
 
 
@@ -94,11 +104,9 @@ def compute_telegram_hash(init_data_map: dict[str, str], bot_token: str) -> str:
 def parse_init_data(init_data: str) -> dict[str, str]:
     if not init_data:
         raise HTTPException(status_code=403, detail="NO_DATA")
-
     parsed = dict(parse_qsl(init_data, keep_blank_values=True))
     if not parsed:
         raise HTTPException(status_code=403, detail="INVALID_INIT_DATA")
-
     return parsed
 
 
@@ -107,10 +115,8 @@ def parse_init_user(user_raw: str) -> dict[str, Any]:
         user_data = json.loads(user_raw)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=403, detail="INVALID_USER_JSON") from exc
-
     if not isinstance(user_data, dict):
         raise HTTPException(status_code=403, detail="INVALID_USER")
-
     return user_data
 
 
@@ -153,18 +159,15 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-   # logger.warning("PARSED keys=%s", sorted(parsed.keys()))
-   # logger.warning("DATA_CHECK_STRING repr=%r", build_data_check_string(parsed))
-
     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
 
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
         logger.warning(
-            "Bad Telegram initData HMAC: ip=%s received=%s computed=%s auth_date=%s",
+            "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… auth_date=%s",
             client_ip,
-            received_hash[:12] + "...",
-            computed_hash[:12] + "...",
+            received_hash[:8],
+            computed_hash[:8],
             parsed.get("auth_date"),
         )
         raise HTTPException(status_code=403, detail="BAD_HASH")
