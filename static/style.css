@@ -3,6 +3,11 @@
    Vibrant, mobile-first, Telegram Mini App
    ═══════════════════════════════════════════════════════════ */
 
+[hidden],
+.hidden {
+  display: none !important;
+}
+
 /* ── Design Tokens ─────────────────────────────────────── */
 :root {
   /* Brand */
