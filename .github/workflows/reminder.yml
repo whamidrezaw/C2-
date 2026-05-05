@@ -3,18 +3,21 @@ name: Reminder Worker
 on:
   schedule:
     - cron: '*/5 * * * *'   # هر ۵ دقیقه
-  workflow_dispatch:          # دکمه Run manually هم داشته باشی
+  workflow_dispatch:          # دکمه اجرای دستی
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   run-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 4
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -23,8 +26,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run reminder worker (max 4 min)
-        run: timeout 240 python -m worker.reminder_worker || true
+      - name: Run reminders (one-shot)
+        run: python -m worker.run_once
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MONGO_URI: ${{ secrets.MONGO_URI }}
@@ -32,7 +35,6 @@ jobs:
           APP_ENV: production
           APP_DEBUG: "false"
           LOG_LEVEL: INFO
-          REMINDER_POLL_INTERVAL_SECS: "200"
           REMINDER_BATCH_SIZE: "50"
           DEFAULT_REMINDER_HOUR: "9"
           STALE_PROCESSING_SECS: "300"
