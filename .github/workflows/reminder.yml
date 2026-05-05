@@ -2,8 +2,8 @@ name: Reminder Worker
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # هر ۵ دقیقه
-  workflow_dispatch:          # دکمه اجرای دستی
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
